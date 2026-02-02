@@ -2,6 +2,7 @@ import { useAppContext } from "@/AppsProvider";
 import { get } from "@/helpers/db";
 import { db } from "@/helpers/firebase";
 import { computeTimePassed } from "@/helpers/timeConverter";
+import { useNotificationHook } from "@/hooks/notificationHook";
 import { Colors } from "@/shared/colors/Colors";
 import SkeletalLoader from "@/shared/components/ChatSkeletal";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
@@ -150,6 +151,8 @@ const Chat = () => {
     // },
   ]);
 
+  const hasNotif = useNotificationHook()
+
   useEffect(() => {
     const messageQuery = query(
       collection(db, "chats"),
@@ -238,6 +241,19 @@ const Chat = () => {
             </Pressable>
             <Pressable onPress={() => router.push("/pet-owner/notifications")}>
               <Feather name="bell" size={24} color="black" />
+                          {
+                            hasNotif && 
+                                  <View
+                                    style={{
+                                      position: "absolute",
+                                      top: -1,
+                                      right: 1,
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: 5,
+                                      backgroundColor: "red",
+                                    }}
+                                  />}
             </Pressable>
           </View>
         </View>

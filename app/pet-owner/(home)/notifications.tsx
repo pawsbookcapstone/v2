@@ -107,8 +107,8 @@ const Notifications = () => {
 
         return {
           id: doc.id,
-          name: data.name || "Unknown",
-          profile: data.img_path || "",
+          name: data.sender_name || "Unknown",
+          profile: data.sender_img_path || "",
           description: descriptions[data.type] ?? "",
           href: data.href,
           type: data.type || "info",
@@ -126,7 +126,7 @@ const Notifications = () => {
   };
 
   useEffect(() => {
-    // fetchNotifications();
+    fetchNotifications();
   }, []);
 
   // Sort notifications latest first
@@ -150,19 +150,19 @@ const Notifications = () => {
   };
 
   const handleFriendRequest = (id: string, accepted: boolean) => {
-    setData((prev) =>
-      prev.map((n) =>
-        n.id === id
-          ? {
-              ...n,
-              description: accepted
-                ? "You accepted the request"
-                : "You declined the request",
-              type: "info",
-            }
-          : n,
-      ),
-    );
+    // setData((prev) =>
+    //   prev.map((n) =>
+    //     n.id === id
+    //       ? {
+    //           ...n,
+    //           description: accepted
+    //             ? "You accepted the request"
+    //             : "You declined the request",
+    //           type: "info",
+    //         }
+    //       : n,
+    //   ),
+    // );
   };
 
   const openDropdown = (event: any, id: string) => {
@@ -175,7 +175,15 @@ const Notifications = () => {
     }
   };
 
+  const navigate = (item:any) => {
+    router.push({
+      pathname: item.href,
+      params: item.params
+    })
+  }
+
   const renderItem = ({ item }: { item: (typeof data)[0] }) => (
+        <TouchableOpacity onPress={() => navigate(item)}>
     <View style={styles.notificationItem}>
       <Image source={{ uri: item.profile }} style={styles.avatar} />
 
@@ -184,7 +192,7 @@ const Notifications = () => {
         <Text style={styles.description}>{item.description}</Text>
 
         {/* Friend request buttons */}
-        {item.type === "friend_request" && (
+        {item.type === "Sent Friend Request" && (
           <View style={styles.friendButtons}>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: Colors.primary }]}
@@ -209,12 +217,13 @@ const Notifications = () => {
         })}
       </Text>
 
-      {item.type !== "friend_request" && (
+      {item.type !== "Sent Friend Request" && (
         <TouchableOpacity onPress={(e) => openDropdown(e.nativeEvent, item.id)}>
           <Entypo name="dots-three-vertical" size={18} color="gray" />
         </TouchableOpacity>
       )}
     </View>
+    </TouchableOpacity>
   );
 
   return (

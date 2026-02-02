@@ -1,4 +1,5 @@
 import { get } from "@/helpers/db";
+import { useNotificationHook } from "@/hooks/notificationHook";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import SkeletonMarketCard from "@/shared/components/MarketSkeleton";
@@ -25,6 +26,7 @@ const marketPlace = () => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [filterVisible, setFilterVisible] = useState(false);
 
+  const hasNotif = useNotificationHook()
   // const onRefresh = () => {
   //   setLoading(true);
   //   setTimeout(() => {
@@ -196,6 +198,20 @@ const marketPlace = () => {
           </Link>
           <Pressable onPress={() => router.push("/pet-owner/notifications")}>
             <Feather name="bell" size={24} color="black" />
+
+                        {
+                          hasNotif && 
+                                <View
+                                  style={{
+                                    position: "absolute",
+                                    top: -1,
+                                    right: 1,
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: 5,
+                                    backgroundColor: "red",
+                                  }}
+                                />}
           </Pressable>
         </View>
       </HeaderLayout>

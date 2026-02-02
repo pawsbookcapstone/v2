@@ -13,6 +13,7 @@ import {
 } from "@/helpers/db";
 import { useNotifHook } from "@/helpers/notifHook";
 import { computeTimePassed } from "@/helpers/timeConverter";
+import { useNotificationHook } from "@/hooks/notificationHook";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import SkeletonPost from "@/shared/components/SkeletalLoader";
@@ -250,7 +251,8 @@ const Home = () => {
     {},
   );
 
-  const addNofif = useNotifHook();
+  const addNotif = useNotifHook();
+  const hasNotif = useNotificationHook()
 
   const onRefresh = async () => {
     setLoading(true);
@@ -346,7 +348,7 @@ const Home = () => {
 
         // 🔔 SEND NOTIFICATION (only if liking)
         if (isLiking) {
-          addNofif({
+          addNotif({
             receiver_id: p.creator_id,
             href: "/pet-owner/profile",
             type: "Like",
@@ -396,7 +398,7 @@ const Home = () => {
       prev.map((p: any) => {
         if (p.id !== postId) return p;
 
-        addNofif({
+        addNotif({
           receiver_id: p.creator_id,
           href: "/pet-owner/(menu)/profile",
           type: "Comment",
@@ -744,6 +746,19 @@ const Home = () => {
           </Pressable>
           <Pressable onPress={() => router.push("/pet-owner/notifications")}>
             <Feather name="bell" size={24} color="black" />
+            {
+              hasNotif && 
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: -1,
+                        right: 1,
+                        width: 8,
+                        height: 8,
+                        borderRadius: 5,
+                        backgroundColor: "red",
+                      }}
+                    />}
           </Pressable>
           <Pressable onPress={() => router.push("/pet-owner/search")}>
             <Feather name="search" size={24} color="black" />
