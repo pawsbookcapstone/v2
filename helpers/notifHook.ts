@@ -31,6 +31,7 @@ export function useNotifHook() {
       sender_name: userName,
       sender_img_path: userImagePath,
       sent_at: serverTimestamp(),
+      seen:false,
     });
   }
   return addNotif;

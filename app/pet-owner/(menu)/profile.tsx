@@ -142,6 +142,12 @@ const Profile = () => {
         const dc = postsSnap.docs[i];
         const d = dc.data();
 
+        let shared = null
+        if (d.shared_post_id){
+          const shareSnap = (await find('posts', d.shared_post_id))
+          shared = shareSnap.data()
+        }
+
         const commentSnap = await all("posts", dc.id, "comments");
         _posts.push({
           id: dc.id,
@@ -150,6 +156,7 @@ const Profile = () => {
             ? d.liked_by_ids.includes(userId)
             : false,
           showComments: false,
+          shared:shared,
           comments: commentSnap.docs.map((_comment: any) => ({
             id: _comment.id,
             ..._comment.data(),
@@ -215,6 +222,18 @@ const Profile = () => {
       )
     );
   };
+  
+    const handleSeeProfile = (post: any) => {
+      if (post.creator_id === userId) {
+        router.push("/pet-owner/profile");
+        return;
+      }
+  
+      router.push({
+        pathname: "/usable/user-profile",
+        params: { userToViewId: post.creator_id },
+      });
+    };
 
   const handleAddComment = (postId: string) => {
     // const text = commentInputs[postId]?.trim();
@@ -244,6 +263,103 @@ const Profile = () => {
 
     // setCommentInputs((prev) => ({ ...prev, [postId]: "" }));
   };
+
+
+    const renderShared = (item: any) => {
+      const maxImagesToShow = 3;
+      const extraImages = (item.img_paths ?? []).length - maxImagesToShow;
+  
+      return (
+        <View style={styles.sharedPostCard}>
+          <View style={styles.sharedPostHeader}>
+            <Pressable
+              style={{ flexDirection: "row", alignItems: "center" }}
+              onPress={() => handleSeeProfile(item)}
+            >
+              {item.creator_img_path ? (
+                <Image
+                  source={{ uri: item.creator_img_path }}
+                  style={styles.sharedProfileImage}
+                />
+              ) : (
+                <View style={styles.sharedProfileImage} />
+              )}
+  
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginLeft: 8,
+                  flex: 1,
+                  gap: 10,
+                }}
+              >
+                <View>
+                  <Text style={styles.sharedUserName}>{item.creator_name}</Text>
+                  <Text style={styles.sharedPostTime}>{item.date_ago}</Text>
+                </View>
+              </View>
+            </Pressable>
+            </View>
+  
+          {/* Content */}
+          <Text style={styles.sharedPostContent}>{item.body}</Text>
+  
+          {/* Tagged Pets */}
+          {item.pets && item.pets.length > 0 && (
+            <View style={styles.taggedPetsContainer}>
+              {item.pets.map((pet: any) => (
+                <TouchableOpacity
+                  key={pet.id}
+                  style={styles.petChip}
+                  onPress={() => console.log("Go to pet profile:", pet.name)}
+                >
+                  {pet.img_path ? (
+                    <Image
+                      source={{ uri: pet.img_path }}
+                      style={styles.petAvatar}
+                    />
+                  ) : (
+                    <View style={styles.petAvatar} />
+                  )}
+                  <Text style={styles.petName}>{pet.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+  
+          {/* Images Grid */}
+          {item.img_paths && item.img_paths.length > 0 && (
+            <View style={styles.imageGrid}>
+              {item.img_paths
+                .slice(0, maxImagesToShow)
+                .map((img: any, idx: number) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.imageWrapper}
+                    onPress={() => {
+                      // setSelectedPostImages(item.img_paths ?? []);
+                      // setSelectedIndex(idx);
+                      // setImageModalVisible(true);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Image
+                      source={{ uri: img }}
+                      style={styles.gridImage}
+                      resizeMode="cover"
+                    />
+                    {idx === maxImagesToShow - 1 && extraImages > 0 && (
+                      <View style={styles.overlay}>
+                        <Text style={styles.overlayText}>+{extraImages}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+            </View>
+          )}
+        </View>)
+        }
 
   return (
     <View style={[screens.screen, { backgroundColor: Colors.background }]}>
@@ -528,6 +644,8 @@ const Profile = () => {
                   />
                 )}
 
+                {post.shared && renderShared(post.shared)}
+
                 {/* Footer */}
                 <View style={styles.postFooter}>
                   <Pressable
@@ -562,19 +680,19 @@ const Profile = () => {
                 {/* Comments */}
                 {post.showComments && (
                   <View style={styles.commentSection}>
-                    {post.comments.map((c: any) => (
-                      <View key={c.id} style={styles.commentRow}>
-                        {c.profileImage ? (
+                    {post.comments.map((c: any, idx:number) => (
+                      <View key={idx} style={styles.commentRow}>
+                        {c.commented_by_img_path ? (
                           <Image
-                            source={{ uri: c.profileImage }}
+                            source={{ uri: c.commented_by_img_path }}
                             style={styles.commentProfile}
                           />
                         ) : (
                           <View style={styles.commentProfile} />
                         )}
                         <View style={styles.commentBubble}>
-                          <Text style={styles.commentUser}>{c.user}</Text>
-                          <Text style={styles.commentText}>{c.text}</Text>
+                          <Text style={styles.commentUser}>{c.commented_by_name}</Text>
+                          <Text style={styles.commentText}>{c.message}</Text>
                         </View>
                       </View>
                     ))}
@@ -588,14 +706,15 @@ const Profile = () => {
                       <TextInput
                         placeholder="Write a comment..."
                         style={styles.commentInput}
-                        value={post.newComment}
-                        onChangeText={(text) =>
-                          setPosts((prev: any) =>
-                            prev.map((p: any) =>
-                              p.id === post.id ? { ...p, newComment: text } : p
-                            )
-                          )
-                        }
+                        value={comment}
+                onChangeText={setComment}
+                        // onChangeText={(text) =>
+                        //   setPosts((prev: any) =>
+                        //     prev.map((p: any) =>
+                        //       p.id === post.id ? { ...p, newComment: text } : p
+                        //     )
+                        //   )
+                        // }
                       />
                       <Pressable onPress={() => handleAddComment(post.id)}>
                         <Text style={styles.postCommentBtn}>Post</Text>
@@ -655,6 +774,17 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 70,
     resizeMode: "cover",
+  },
+  sharedProfileImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#C3C0C0",
+  },
+  sharedPostHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
   },
   actionWrapper: {
     flexDirection: "row",
@@ -723,6 +853,36 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
 
+
+  imageGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+    marginTop: 10,
+  },
+  imageWrapper: {
+    width: "32%",
+    aspectRatio: 1,
+    borderRadius: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  gridImage: {
+    width: "100%",
+    height: "100%",
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  overlayText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+
   friendGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -781,6 +941,18 @@ const styles = StyleSheet.create({
   postsSection: {
     marginTop: 5,
   },
+  sharedPostCard: {
+    borderWidth: 1,
+    borderBottomWidth:0,
+    borderColor: Colors.lightGray,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    borderBottomRightRadius:0,
+    borderBottomLeftRadius:0,
+    width: "95%",
+    alignSelf: "center",
+  },
   postCard: {
     backgroundColor: "#fff",
     borderRadius: 10,
@@ -800,6 +972,18 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+  },
+  sharedUserName: {
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  sharedPostContent: {
+    marginVertical: 5,
+    fontSize: 14,
+  },
+  sharedPostTime: {
+    fontSize: 12,
+    color: "#888",
   },
   userName: {
     fontWeight: "600",

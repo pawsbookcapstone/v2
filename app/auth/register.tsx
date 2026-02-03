@@ -67,10 +67,12 @@ const Register = () => {
       );
 
       await set("users", userCredential.user.uid).value({
+        id: userCredential.user.uid,
         firstname: firstname,
         lastname: lastname,
         email: email,
         createdAt: serverTimestamp(),
+        online_status: true,
         img_path:
           "https://res.cloudinary.com/diwwrxy8b/image/upload/v1769641991/jzibxr8wuvqhfqwcnusm.jpg",
       });

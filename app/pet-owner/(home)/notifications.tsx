@@ -1,5 +1,5 @@
 import { useAppContext } from "@/AppsProvider";
-import { get, where } from "@/helpers/db";
+import { find, get, remove, set, where } from "@/helpers/db";
 import { NotifType } from "@/helpers/notifHook";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
@@ -10,6 +10,7 @@ import { Entypo } from "@expo/vector-icons";
 import { Href, router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   findNodeHandle,
   FlatList,
   Image,
@@ -61,9 +62,11 @@ type NotificationItem = {
   name: string;
   profile: string;
   href: Href;
+  accepted:boolean;
   description: string;
   type: NotifType;
   time: string; // ISO string
+  params?: any; // ISO string
 };
 
 const descriptions: any = {
@@ -73,7 +76,7 @@ const descriptions: any = {
   "Decline Friend Request": "Decline your friend request",
   "Sent a Message": "Sent you a message",
   "Sent a Image": "Sent you an image",
-  Share: "Share your post",
+  "Share": "Shared your post",
 };
 
 const Notifications = () => {
@@ -105,19 +108,27 @@ const Notifications = () => {
       const notifications = snapshot.docs.map((doc) => {
         const data = doc.data();
 
+        let desc
+        if (data.friend_request_accepted != undefined){
+          desc = data.friend_request_accepted ? "You accepted the request"
+                : "You declined the request"
+        }
+        else desc = descriptions[data.type] ?? ''
+
         return {
           id: doc.id,
           name: data.sender_name || "Unknown",
           profile: data.sender_img_path || "",
-          description: descriptions[data.type] ?? "",
+          description: desc,
           href: data.href,
+          accepted: data.friend_request_accepted,
           type: data.type || "info",
           time: data.sent_at.toDate(),
+          params: data.params
         };
       });
 
       setData(notifications);
-      console.log("notification:", notifications);
     } catch (error) {
       console.log("Error fetching notifications:", error);
     } finally {
@@ -149,21 +160,48 @@ const Notifications = () => {
     setDropdownPos(null);
   };
 
-  const handleFriendRequest = (id: string, accepted: boolean) => {
-    // setData((prev) =>
-    //   prev.map((n) =>
-    //     n.id === id
-    //       ? {
-    //           ...n,
-    //           description: accepted
-    //             ? "You accepted the request"
-    //             : "You declined the request",
-    //           type: "info",
-    //         }
-    //       : n,
-    //   ),
-    // );
+  const handleFriendRequest = async (item:any, accepted: boolean) => {
+    const friendSnap = await find('friends', item.params?.id)
+
+    if (accepted && !friendSnap.exists())
+    {
+      Alert.alert("Error", "You already declined this request or this request was cancelled!!!")
+      setFriendReqData(item.id, false)
+      return
+    }
+    if (!accepted && friendSnap.exists() && friendSnap.data().confirmed)
+    {
+      Alert.alert("Error", "You already confirmed this request!!!")
+      setFriendReqData(item.id, true)
+      return
+    }
+    setFriendReqData(item.id, accepted)
+    
+    if (accepted)
+      set('friends', item.params?.id).value({confirmed: true})
+    else
+      remove("friends", item.params?.id);
   };
+
+  const setFriendReqData = (id:string, accepted:boolean) => {
+    set('notifications',id).value({
+      friend_request_accepted: accepted,
+      seen: true
+    })
+    setData((prev) =>
+      prev.map((n) =>
+        n.id === id
+          ? {
+              ...n,
+              accepted: accepted,
+              description: accepted
+                ? "You accepted the request"
+                : "You declined the request",
+            }
+          : n,
+      ),
+    ); 
+  }
 
   const openDropdown = (event: any, id: string) => {
     const handle = findNodeHandle(event.target);
@@ -176,6 +214,24 @@ const Notifications = () => {
   };
 
   const navigate = (item:any) => {
+    set('notifications', item.id).value({
+      seen: true
+    })
+
+    if (item.type === 'Sent a Message' && item.params.groupChatId){
+      find('chats', item.params.groupChatId).then(g => {
+        router.push({
+          pathname: '/pet-owner/group-chat',
+          params: {
+            chatDetailsStr: JSON.stringify({
+              id: g.id,
+              ...g.data()
+            })
+          }
+        })
+      })
+      return
+    }
     router.push({
       pathname: item.href,
       params: item.params
@@ -192,17 +248,17 @@ const Notifications = () => {
         <Text style={styles.description}>{item.description}</Text>
 
         {/* Friend request buttons */}
-        {item.type === "Sent Friend Request" && (
+        {item.type === "Sent Friend Request" && !item.accepted && (
           <View style={styles.friendButtons}>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: Colors.primary }]}
-              onPress={() => handleFriendRequest(item.id, true)}
+              onPress={() => handleFriendRequest(item, true)}
             >
               <Text style={{ color: "white", fontSize: 13 }}>Accept</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: "#ddd" }]}
-              onPress={() => handleFriendRequest(item.id, false)}
+              onPress={() => handleFriendRequest(item, false)}
             >
               <Text style={{ color: "#333", fontSize: 13 }}>Decline</Text>
             </TouchableOpacity>

@@ -144,7 +144,6 @@ const Adapt = () => {
   };
 
   const handleChat = (name: string, ownerId: string, ownerImage: string) => {
-    console.log(name, ownerId, ownerImage);
     router.push({
       pathname: "/pet-owner/(chat)/chat-field",
       params: {

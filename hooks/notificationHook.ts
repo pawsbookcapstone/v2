@@ -8,7 +8,11 @@ export function useNotificationHook(){
     const [hasNotif, setHasNotif] = useState(false)
 
     useEffect(() => {
-    const q = query(collection(db, "notifications"), where('receiver_id', '==', userId));
+    const q = query(
+        collection(db, "notifications"), 
+        where('receiver_id', '==', userId), 
+        where('seen', '!=', true)
+    );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const count = snapshot.docs.length;

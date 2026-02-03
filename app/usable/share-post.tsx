@@ -1,17 +1,23 @@
+import { useAppContext } from "@/AppsProvider";
+import { add, find, set } from "@/helpers/db";
+import { useNotifHook } from "@/helpers/notifHook";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { screens, ShadowStyle } from "@/shared/styles/styles";
 import { Entypo } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+import { serverTimestamp } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Image,
   Modal,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  ToastAndroid,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -26,15 +32,19 @@ const dummyPets = [
 ];
 
 const SharePost = () => {
+  const {setFunc, userId, userName, userImagePath} = useAppContext()
+
   const { post, taggedPets: taggedPetsParam } = useLocalSearchParams();
   const parsedPost = post ? JSON.parse(post as string) : null;
 
   const [taggedPets, setTaggedPets] = useState<
-    { id: string; name: string; image: string }[]
+    { id: string; name: string; img_path: string }[]
   >([]);
   const [caption, setCaption] = useState("");
   const [selectedPets, setSelectedPets] = useState<string[]>([]);
   const [showExitModal, setShowExitModal] = useState(false);
+
+  const addNotif = useNotifHook()
 
   useEffect(() => {
     if (taggedPetsParam) {
@@ -63,28 +73,60 @@ const SharePost = () => {
     );
   };
 
-  const handleShare = () => {
-    const sharedPost = {
-      id: Date.now().toString(),
-      user: "You",
-      profileImage: myProfileImage,
-      time: "Just now",
-      content: caption,
-      images: [],
-      liked: false,
-      likesCount: 0,
-      comments: [],
-      showComments: false,
-      isFriend: true,
-      sharesCount: 0,
-      taggedPets: dummyPets.filter((p) => selectedPets.includes(p.id)),
-      sharedPost: parsedPost,
-    };
-
-    router.push({
-      pathname: "/pet-owner/home",
-      params: { newPost: JSON.stringify(sharedPost) },
+  const handleTag = () => {
+    setFunc({
+      call: (_tags: any) => {
+        setTaggedPets(_tags);
+      },
     });
+    router.push("/usable/pet-list");
+  };
+
+  const handleShare = async () => {
+    if (!caption.trim()) {
+      Alert.alert("Empty Post", "Please add some text.");
+      return;
+    }
+
+    try {
+      const sharedPostSnap = await find('posts', parsedPost.id)
+      const sharesCount = parseInt(sharedPostSnap.data()?.shares ?? 0) + 1
+      set('posts', parsedPost.id).value({
+        shares: sharesCount
+      })
+
+      let data: any = {
+        creator_id: userId,
+        creator_name: userName,
+        creator_img_path: userImagePath ?? null,
+        body: caption.trim(),
+        date: serverTimestamp(),
+        shares: 0,
+        shared_post_id: parsedPost.id
+      };
+
+      if (taggedPets.length > 0) {
+        data.pets = taggedPets.map((p) => ({
+          name: p.name,
+          id: p.id,
+          img_path: p.img_path,
+        }));
+      }
+
+        await add("posts").value(data);
+        addNotif({
+          receiver_id: parsedPost.creator_id,
+          type: 'Share',
+          href: '/pet-owner/profile'
+        })
+        ToastAndroid.show("Post shared", ToastAndroid.SHORT);
+
+      router.back();
+    } catch (e) {
+      Alert.alert("Error", e + "");
+    }
+return
+
   };
 
   const handleBack = () => {
@@ -116,7 +158,7 @@ const SharePost = () => {
             <Text style={styles.profileName}>{myProfileName}</Text>
             <TouchableOpacity
               style={styles.actionBtn}
-              onPress={() => router.push("/usable/pet-list")}
+              onPress={handleTag}
             >
               <Entypo name="price-tag" size={18} color={Colors.primary} />
               <Text style={styles.actionText}>Tag Pets</Text>
@@ -137,40 +179,37 @@ const SharePost = () => {
         {/* 🐾 Tag Section */}
         <Text style={styles.sectionTitle}>Tagged Pets</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {dummyPets.map((pet) => {
-            const isSelected = selectedPets.includes(pet.id);
-            return (
+          {taggedPets.map((pet) => 
               <TouchableOpacity
                 key={pet.id}
                 style={[
                   styles.petCard,
-                  isSelected && { borderColor: Colors.primary, borderWidth: 2 },
+                  { borderColor: Colors.primary, borderWidth: 2 },
                 ]}
                 onPress={() => togglePetTag(pet.id)}
               >
-                <Image source={{ uri: pet.image }} style={styles.petImage} />
+                <Image source={{ uri: pet.img_path }} style={styles.petImage} />
                 <Text style={styles.petName}>{pet.name}</Text>
               </TouchableOpacity>
-            );
-          })}
+            )}
         </ScrollView>
 
         {/* 🗞️ Original Post Preview */}
         <View style={[styles.postCard, ShadowStyle]}>
           <View style={styles.row}>
             <Image
-              source={{ uri: parsedPost.profileImage }}
+              source={{ uri: parsedPost.creator_img_path }}
               style={styles.profileImage}
             />
             <View style={{ marginLeft: 10 }}>
-              <Text style={styles.userName}>{parsedPost.user}</Text>
-              <Text style={styles.postTime}>{parsedPost.time}</Text>
+              <Text style={styles.userName}>{parsedPost.creator_name}</Text>
+              <Text style={styles.postTime}>{parsedPost.date_ago}</Text>
             </View>
           </View>
-          <Text style={styles.content}>{parsedPost.content}</Text>
-          {parsedPost.images?.length > 0 && (
+          <Text style={styles.content}>{parsedPost.body}</Text>
+          { parsedPost.img_paths && parsedPost.img_paths?.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {parsedPost.images.map((img: string, idx: number) => (
+              {parsedPost.img_paths.map((img: string, idx: number) => (
                 <Image key={idx} source={{ uri: img }} style={styles.image} />
               ))}
             </ScrollView>

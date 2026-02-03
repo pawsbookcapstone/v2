@@ -1,8 +1,12 @@
+import { useAppContext } from "@/AppsProvider";
+import { get, serverTimestamp, set, where } from "@/helpers/db";
+import { auth } from "@/helpers/firebase";
 import { Colors } from "@/shared/colors/Colors";
 import Loader from "@/shared/components/Loader";
 import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Image,
   Modal,
@@ -16,6 +20,7 @@ import {
 type Profile = {
   id: string;
   name: string;
+  email:string;
   avatar: string;
 };
 
@@ -30,40 +35,84 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({
   onClose,
   onSelectProfile,
 }) => {
+  const {userId, setUserId} = useAppContext()
+
   const [isLoading, setIsLoading] = useState(false);
-  const [profiles] = useState<Profile[]>([
-    {
-      id: "1",
-      name: "John Doe",
-      avatar: "https://randomuser.me/api/portraits/men/32.jpg",
-    },
-    {
-      id: "2",
-      name: "Jane Smith",
-      avatar: "https://randomuser.me/api/portraits/women/44.jpg",
-    },
+  const [profiles, setProfiles] = useState<Profile[]>([
+    // {
+    //   id: "1",
+    //   name: "John Doe",
+    //   avatar: "https://randomuser.me/api/portraits/men/32.jpg",
+    // },
+    // {
+    //   id: "2",
+    //   name: "Jane Smith",
+    //   avatar: "https://randomuser.me/api/portraits/women/44.jpg",
+    // },
   ]);
 
-  const [activeProfileId, setActiveProfileId] = useState<string | null>("1");
+  // const [activeProfile, setActiveProfile] = useState<Profile | null>(null);
 
   const handleSelectProfile = async (profile: Profile) => {
-    setActiveProfileId(profile.id);
+    // setActiveProfile(profile);
+    onClose()
+    
+    if (profile.id === userId){
+      return
+    }
+    set("users", userId).value({ last_online_at: serverTimestamp(), active_status: 'inactive' });
+    setUserId(null)
+    auth.signOut();
+
+    router.push({
+      pathname:'/auth/Login',
+      params: {
+        email: profile.email
+      }
+    })
 
     // Wait briefly to show the check
-    setTimeout(() => {
-      onClose();
-      setIsLoading(true);
-      onSelectProfile(profile);
+    // setTimeout(() => {
+    //   onClose();
+    //   setIsLoading(true);
+    //   onSelectProfile(profile);
 
-      const path =
-        profile.id === "1"
-          ? "/pet-owner/(tabs)/home"
-          : "/other-user/(tabs)/home";
+    //   const path =
+    //     profile.id === "1"
+    //       ? "/pet-owner/(tabs)/home"
+    //       : "/other-user/(tabs)/home";
 
-      router.push(path);
-      setIsLoading(false);
-    }, 800);
+    //   router.push(path);
+    //   setIsLoading(false);
+    // }, 800);
   };
+
+  useEffect(() => {
+    const getProfiles = async () => {
+      try {
+        const _profiles = await AsyncStorage.getItem('profiles')
+        const ids = _profiles?.split(',')
+        const snap = await get('users').where(where('id', 'in', ids))
+        setProfiles(snap.docs.map(s => {
+          const d = s.data()
+          const v = {
+            id: d.id,
+            email: d.email,
+            name: `${d.firstname} ${d.lastname}`,
+            avatar: d.img_path
+          }
+          // if(d.id == userId)
+          //   setActiveProfile(v)
+          return v
+        }));
+      } catch(e) {
+        console.log(e);
+        
+      }
+    }
+
+    getProfiles()
+  }, [])
 
   return (
     <>
@@ -87,7 +136,7 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({
               {/* Profile List */}
               <View style={styles.profileList}>
                 {profiles.map((profile) => {
-                  const isActive = profile.id === activeProfileId;
+                  const isActive = profile.id === userId;
                   return (
                     <Pressable
                       key={profile.id}

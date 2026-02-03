@@ -1,11 +1,14 @@
+import { useAppContext } from "@/AppsProvider";
+import { add, get, serverTimestamp, where } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { screens } from "@/shared/styles/styles";
 import { Feather, FontAwesome6 } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  Alert,
   FlatList,
   Image,
   Pressable,
@@ -16,22 +19,29 @@ import {
 } from "react-native";
 
 const CreateGc = () => {
+  const {userId} = useAppContext()
+
   const [groupName, setGroupName] = useState("");
   const [search, setSearch] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
 
-  const users = [
-    {
-      id: "1",
-      name: "Alex Johnson",
-      avatar: "https://i.pravatar.cc/100?img=1",
-    },
-    { id: "2", name: "Maria Gomez", avatar: "https://i.pravatar.cc/100?img=2" },
-    { id: "3", name: "James Lee", avatar: "https://i.pravatar.cc/100?img=3" },
-    { id: "4", name: "Sophia Tan", avatar: "https://i.pravatar.cc/100?img=4" },
-  ];
+  const [users, setUsers] = useState<any>([]);
 
-  const filteredUsers = users.filter((u) =>
+  useEffect(() => {
+    get('users').where(where('id', '!=', userId))
+    .then(({docs}) => {
+      setUsers(docs.map(user => {
+        const d = user.data()
+        return {
+          id:d.id,
+          name: `${d.firstname} ${d.lastname}`,
+          img_path: d.img_path
+        }
+      }))
+    })
+  }, [])
+
+  const filteredUsers = users.filter((u:any) =>
     u.name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -41,9 +51,23 @@ const CreateGc = () => {
     );
   };
 
-  const handleCreate = () => {
-    if (selectedUsers.length === 0) return;
-    console.log("Creating group:", { groupName, selectedUsers });
+  const handleCreate = async () => {
+    if (groupName.trim().length == 0){
+      Alert.alert("Error", "Please provide a group name!!!")
+      return
+    }
+    if (selectedUsers.length === 0) {
+      Alert.alert("Error", "Please select users to create group!!!")
+      return;
+    }
+
+      add("chats").value({
+        users: [userId, ...selectedUsers],
+        group:true,
+        group_name: groupName.trim(),
+        created_at: serverTimestamp(),
+        last_sent_at: serverTimestamp(),
+      });
     router.back();
   };
 
@@ -83,7 +107,7 @@ const CreateGc = () => {
             style={{ marginRight: 8 }}
           />
           <TextInput
-            placeholder="Group Name (optional)"
+            placeholder="Group Name"
             placeholderTextColor="#A0A0A0"
             value={groupName}
             onChangeText={setGroupName}
@@ -125,7 +149,7 @@ const CreateGc = () => {
                   selected && styles.shadow,
                 ]}
               >
-                <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                <Image source={{ uri: item.img_path }} style={styles.avatar} />
                 <Text style={styles.userName}>{item.name}</Text>
                 {selected && <Text style={styles.checkmark}>✓</Text>}
               </Pressable>

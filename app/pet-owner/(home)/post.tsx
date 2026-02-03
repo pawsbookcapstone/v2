@@ -146,7 +146,6 @@ const PostScreen = () => {
   const handleTag = () => {
     setFunc({
       call: (_tags: any) => {
-        console.log("test func", _tags);
         setTaggedPets(_tags);
       },
     });

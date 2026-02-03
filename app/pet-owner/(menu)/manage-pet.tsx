@@ -88,7 +88,6 @@ const ManagePet = () => {
     setLoading(true);
     try {
       const petsSnap = await all("users", userId, "pets");
-      console.log(petsSnap.docs.map((p) => p.data()));
 
       setPets(
         petsSnap.docs.map((pet) => {

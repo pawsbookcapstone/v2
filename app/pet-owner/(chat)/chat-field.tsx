@@ -41,7 +41,8 @@ const ChatField = () => {
     otherUserId,
     otherUserName,
     otherUserImgPath,
-  }: { otherUserId: string; otherUserName: string; otherUserImgPath: string } =
+    chatDetails
+  }: { otherUserId: string; otherUserName: string; otherUserImgPath: string; chatDetails:any } =
     useLocalSearchParams();
 
   const [chatId] = useState(generateChatId(userId, otherUserId));
@@ -58,7 +59,6 @@ const ChatField = () => {
   useEffect(() => {
     const createDetails = async () => {
       const snap = await find("chats", chatId);
-      console.log("chat:", otherUserId, otherUserName, otherUserImgPath);
 
       if (snap.exists() && snap.data().last_sent_at) return;
 

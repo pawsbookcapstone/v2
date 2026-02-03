@@ -1,5 +1,4 @@
 import { useAppContext } from "@/AppsProvider";
-import { get } from "@/helpers/db";
 import { db } from "@/helpers/firebase";
 import { computeTimePassed } from "@/helpers/timeConverter";
 import { useNotificationHook } from "@/hooks/notificationHook";
@@ -163,6 +162,17 @@ const Chat = () => {
       setMessages(
         snapshot.docs.map((d) => {
           const t = d.data();
+          if (t.group){
+            return {
+              id: d.id,
+              name: t.group_name,
+              users: t.users,
+              group: true,
+              img_path: '',
+              last_message: t.last_message ?? 'No message yet.',
+              time: computeTimePassed(t.last_sent_at?.toDate())
+            }
+          }
           const otherUserId = t.users[0] === userId ? t.users[1] : t.users[0];
           return {
             id: otherUserId,
@@ -174,9 +184,12 @@ const Chat = () => {
       );
     });
 
-    get("users")
-      .where(where("online", "==", true))
-      .then(({ docs }) =>
+    const onlineQuery = query(
+      collection(db, "users"),
+        where("online_status", "==", true), 
+        where('active_status', '!=', 'inactive'),
+    );
+    const unsubscribeOnline = onSnapshot(onlineQuery, ({docs}) => {
         setOnlineUsers(
           docs
             .map((res) => {
@@ -185,23 +198,25 @@ const Chat = () => {
                 id: res.id,
                 name: `${d.firstname} ${d.lastname}`,
                 avatar: d.img_path,
+                active_status: d.active_status,
+                last_online_at: d.last_online_at
               };
             })
             .filter((v) => v.id !== userId),
-        ),
-      );
+        )
+    })
 
     return () => {
+      unsubscribeOnline();
       unsubscribe();
     };
   }, []);
 
   const handleChat = (chat: any) => {
-    console.log(chat);
-    if (chat.type === "group") {
+    if (chat.group) {
       router.push({
         pathname: "/pet-owner/(chat)/group-chat",
-        params: { id: chat.id, name: chat.name, avatar: chat.avatar },
+        params: { chatDetailsStr:JSON.stringify(chat) },
       });
     } else {
       router.navigate({
@@ -234,6 +249,11 @@ const Chat = () => {
           <Text style={styles.title}>Inbox</Text>
           <View style={styles.headerActions}>
             {/* <Pressable onPress={() => router.push("/pet-owner/create-gc")}> */}
+            <Pressable
+              onPress={() => router.push("/pet-owner/(chat)/create-gc")}
+            >
+              <Feather name="users" size={24} color="black" />
+            </Pressable>
             <Pressable
               onPress={() => router.push("/pet-owner/(chat)/search-users")}
             >

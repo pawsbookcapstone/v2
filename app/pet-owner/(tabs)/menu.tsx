@@ -1,7 +1,7 @@
 import { useAppContext } from "@/AppsProvider";
 import CreateProfileModal from "@/components/modals/CreateProfileModal";
 import LogoutModal from "@/components/modals/LogoutModal";
-import { all, set } from "@/helpers/db";
+import { all, serverTimestamp, set } from "@/helpers/db";
 import { auth } from "@/helpers/firebase";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
@@ -28,7 +28,7 @@ const myProfileImage = {
 };
 
 const profile = () => {
-  const { userId, userName, userImagePath } = useAppContext();
+  const { userId, userName, userImagePath, setUserId } = useAppContext();
 
   const [isLogoutModalVisible, setLogoutModalVisible] = useState(false);
   const [isCreateProfileModalVisible, setCreateProfileModalVisible] =
@@ -61,11 +61,12 @@ const profile = () => {
       setPets(snap.docs.map((pet) => pet.data()));
     };
     fetchPets();
-  });
+  }, []);
 
   const handleLogout = () => {
+    set("users", userId).value({ last_online_at: serverTimestamp(), active_status: 'inactive' });
+    setUserId(null)
     auth.signOut();
-    set("users", userId).value({ online: false });
     router.replace("/auth/Login");
     console.log("Logged out");
     setLogoutModalVisible(false);

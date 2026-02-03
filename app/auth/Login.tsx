@@ -1,12 +1,13 @@
 import { useAppContext } from "@/AppsProvider";
 import { LoadingButton } from "@/components/LoadingButton";
 
-import { find, set } from "@/helpers/db";
+import { find, serverTimestamp, set } from "@/helpers/db";
 import { auth } from "@/helpers/firebase";
 import { Colors } from "@/shared/colors/Colors";
 import { screens } from "@/shared/styles/styles";
 import { FontAwesome5, MaterialIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router, useLocalSearchParams } from "expo-router";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
 import {
@@ -21,7 +22,9 @@ import {
 } from "react-native";
 
 const Login = () => {
-  const [email, setemail] = useState("email@gmail.com");
+  const {email:emailToSwitch}:any = useLocalSearchParams()
+
+  const [email, setemail] = useState(emailToSwitch ?? "email@gmail.com");
   const [password, setpassword] = useState("PASSWORD");
   //ad's account
   // const [email, setemail] = useState("adrianfegalan@gmail.com");
@@ -55,7 +58,9 @@ const Login = () => {
         password,
       );
 
-      const userDoc = await find("users", userCredential.user.uid);
+      const userId = userCredential.user.uid
+
+      const userDoc = await find("users", userId);
 
       if (!userDoc.exists()) {
         await auth.signOut();
@@ -63,17 +68,23 @@ const Login = () => {
         return;
       }
 
-      //add this after this or in line 61- from edmar
-
-      if (!userDoc.exists()) {
-        await auth.signOut();
-        Alert.alert("Error", "Account not found!!!");
-        return;
+      let profiles = await AsyncStorage.getItem('profiles')
+      let changed = true
+      if (!profiles)
+        profiles = userId
+      else {
+        if (!profiles.includes(userId))
+          profiles += ',' + userId
+        else
+          changed = false
       }
-      set("users", userCredential.user.uid).value({ online: true });
+      if (changed)
+        AsyncStorage.setItem('profiles', profiles)
+
+      set("users", userId).value({ last_online_at: serverTimestamp(), active_status: 'active' });
       //until here
       const user = userDoc.data();
-      setUserId(userCredential.user.uid);
+      setUserId(userId);
       setUserFirstName(user.firstname);
       setUserLastName(user.lastname);
       setUserEmail(user.email);

@@ -1,10 +1,12 @@
 // creatProfile.tsx
+import { add } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { screens } from "@/shared/styles/styles";
 import { FontAwesome } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { serverTimestamp } from "firebase/firestore";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
@@ -83,8 +85,11 @@ const [allowAppointments, setAllowAppointments] = useState(false);
     const payload = {
       name: pageName.trim(),
       categories: selectedCategories,
-      createdAt: new Date().toISOString(),
+      allow_appointments: allowAppointments,
+      created_at: serverTimestamp()
     };
+
+    add('pages').value(payload)
 
     // TODO: replace this with your API / store logic
     console.log("Created profile:", payload);

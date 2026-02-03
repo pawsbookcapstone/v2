@@ -55,14 +55,6 @@ const CreateLostFoundPost = () => {
         petImages: finalImages,
         // ownerId:fin user.uid   // add later if needed
       });
-      console.log("Post Created:", {
-        images,
-        caption,
-        type,
-        userId,
-        userName,
-        userImagePath,
-      });
       router.replace("/pet-owner/(menu)/lost-found");
     } catch (error) {
       console.error("Failed to create appointment:", error);

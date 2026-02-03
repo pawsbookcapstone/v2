@@ -98,7 +98,6 @@ const addFriend = () => {
       }
 
       setFriendRequests(_friendRequestsData);
-      console.log(_friendRequestsData);
     } catch (e) {
       Alert.alert("Error", e + "");
       console.log("Error", e);

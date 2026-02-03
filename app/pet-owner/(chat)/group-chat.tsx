@@ -1,11 +1,16 @@
+import { useAppContext } from "@/AppsProvider";
+import { uploadImageUri } from "@/helpers/cloudinary";
+import { add, get, set, where } from "@/helpers/db";
+import { db } from "@/helpers/firebase";
+import { useNotifHook } from "@/helpers/notifHook";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { screens, ShadowStyle } from "@/shared/styles/styles";
-import { TMessage } from "@/shared/Types/MessageType";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useRef, useState } from "react";
+import { collection, onSnapshot, orderBy, query, serverTimestamp } from "firebase/firestore";
+import React, { useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Image,
@@ -18,54 +23,89 @@ import {
   View,
 } from "react-native";
 
-type GroupMessage = TMessage & {
-  senderName?: string;
-  senderAvatar?: string;
-};
-
 const GroupChat = () => {
-  const { id, name, avatar } = useLocalSearchParams();
+  const {userId} = useAppContext()
 
-  const [messages, setMessages] = useState<GroupMessage[]>([
-    {
-      id: "1",
-      text: "Hey team, ready for the meeting?",
-      sender: "other",
-      senderName: "Sophia",
-      senderAvatar: "https://randomuser.me/api/portraits/women/65.jpg",
-    },
-    {
-      id: "2",
-      text: "Yes! Just reviewing the agenda now.",
-      sender: "me",
-    },
-    {
-      id: "3",
-      text: "I’ll join in 5 minutes!",
-      sender: "other",
-      senderName: "Liam",
-      senderAvatar: "https://randomuser.me/api/portraits/men/50.jpg",
-    },
+  const { chatDetailsStr }:{chatDetailsStr:string}= useLocalSearchParams();
+  const [chatDetails] = useState(JSON.parse(chatDetailsStr))
+
+  const [users, setUsers] = useState<any>({})
+
+  const [messages, setMessages] = useState<any>([
   ]);
 
   const [input, setInput] = useState("");
   const flatListRef = useRef<FlatList>(null);
 
+  const addNotif = useNotifHook()
+
+  useEffect(() => {
+    get('users').where(where('id', '!=', userId), where('id', 'in', chatDetails.users))
+    .then(({docs})=>{
+      let _users:any = {}
+
+      for (const u of docs){
+        const h = u.data()
+        _users[u.id] = {
+          name: `${h.firstname} ${h.lastname}`,
+          avatar: h.img_path
+        }
+      }
+
+      setUsers(_users)
+    })
+
+    const messageQuery = query(
+      collection(db, "chats", chatDetails.id, "messages"),
+      orderBy("sent_at", "asc"),
+    );
+    const unsubscribe = onSnapshot(messageQuery, (snapshot) => {
+      setMessages(snapshot.docs.map((f) => {
+        const a = f.data()
+        
+        const yourMessage = a.sender_id === userId
+        const _user = yourMessage ? {} : users[a.sender_id]
+        return {
+          id: f.id,
+          message: a.message,
+          img_path: a.img_path,
+          yourMessage: yourMessage,
+          ..._user,
+        }
+      }));
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [])
+
   const sendMessage = () => {
     if (!input.trim()) return;
 
-    const newMessage: GroupMessage = {
-      id: Date.now().toString(),
-      text: input,
-      sender: "me",
-    };
+    set("chats", chatDetails.id).value({
+      last_message: input.trim(),
+      last_sent_at: serverTimestamp(),
+    });
+    add("chats", chatDetails.id, "messages").value({
+      message: input.trim(),
+      sender_id: userId,
+      sent_at: serverTimestamp(),
+    });
 
-    setMessages((prev) => [...prev, newMessage]);
-    setInput("");
+    for(const id of chatDetails.users){
+      if (id === userId) continue
 
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+      addNotif({
+        receiver_id: id,
+        href: "/pet-owner/chat-field",
+        type: "Sent a Message",
+        params: {
+          groupChatId: chatDetails.id
+        },
+      });
+    }
+    setInput("")
   };
 
   const pickImage = async () => {
@@ -81,66 +121,75 @@ const GroupChat = () => {
       quality: 0.7,
     });
 
-    if (!result.canceled) {
-      const newMessage: GroupMessage = {
-        id: Date.now().toString(),
-        image: result.assets[0].uri,
-        sender: "me",
-        text: "",
-      };
-      setMessages((prev) => [...prev, newMessage]);
+    if (result.canceled) return
 
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+    set("chats", chatDetails.id).value({
+      last_message: "Sent an image.",
+      last_sent_at: serverTimestamp(),
+    });
+    const img_path = await uploadImageUri(result.assets[0].uri);
+    add("chats", chatDetails.id, "messages").value({
+      img_path: img_path,
+      sender_id: userId,
+      sent_at: serverTimestamp(),
+    });
+
+    for(const id of chatDetails.users){
+      if (id === userId) continue
+
+      addNotif({
+        receiver_id: id,
+        href: "/pet-owner/chat-field",
+        type: "Sent a Image",
+        params: {
+          groupChatId: chatDetails.id,
+          groupChatName: chatDetails.name
+        },
+      });
     }
   };
 
-  const renderMessage = ({ item }: { item: GroupMessage }) => {
-    const isMe = item.sender === "me";
-    return (
+  const renderMessage = ({ item }: { item:any }) => 
       <View
         style={[
           styles.messageRow,
-          isMe
+          item.yourMessage
             ? { justifyContent: "flex-end" }
             : { justifyContent: "flex-start" },
         ]}
       >
-        {!isMe && item.senderAvatar && (
+        {!item.yourMessage && item.avatar && (
           <Image
-            source={{ uri: item.senderAvatar }}
+            source={{ uri: item.avatar }}
             style={styles.senderAvatar}
           />
         )}
 
         <View>
-          {!isMe && item.senderName && (
-            <Text style={styles.senderName}>{item.senderName}</Text>
+          {!item.yourMessage && item.name && (
+            <Text style={styles.senderName}>{item.name}</Text>
           )}
 
           <View
-            style={[styles.bubble, isMe ? styles.myBubble : styles.otherBubble]}
+            style={[styles.bubble, item.yourMessage ? styles.myBubble : styles.otherBubble]}
           >
-            {item.text ? (
+            {item.message ? (
               <Text
                 style={[
                   styles.bubbleText,
-                  isMe ? styles.myText : styles.otherText,
+                  item.yourMessage ? styles.myText : styles.otherText,
                 ]}
               >
-                {item.text}
+                {item.message}
               </Text>
             ) : null}
 
-            {item.image && (
-              <Image source={{ uri: item.image }} style={styles.chatImage} />
+            {item.img_path && (
+              <Image source={{ uri: item.img_path }} style={styles.chatImage} />
             )}
           </View>
         </View>
       </View>
-    );
-  };
 
   return (
     <View style={[screens.screen, { backgroundColor: Colors.white }]}>
@@ -152,11 +201,11 @@ const GroupChat = () => {
           </TouchableOpacity>
 
           <View style={styles.userInfo}>
-            <Image
+            {/* <Image
               source={{ uri: avatar as string }}
               style={styles.groupAvatar}
             />
-            <Text style={styles.groupName}>{name}</Text>
+            <Text style={styles.groupName}>{name}</Text> */}
           </View>
         </View>
       </HeaderLayout>
@@ -260,7 +309,8 @@ const styles = StyleSheet.create({
   },
 
   bubble: {
-    maxWidth: "70%",
+    width: '100%',
+    maxWidth: "80%",
     padding: 10,
     borderRadius: 12,
   },

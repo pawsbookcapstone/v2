@@ -4,6 +4,7 @@ import ReportPostModal from "@/components/modals/ReportPostModal";
 import {
   add,
   all,
+  find,
   get,
   orderBy,
   remove,
@@ -277,6 +278,12 @@ const Home = () => {
         const dc = snap.docs[i];
         const d = dc.data();
 
+        let shared = null
+        if (d.shared_post_id){
+          const shareSnap = (await find('posts', d.shared_post_id))
+          shared = shareSnap.data()
+        }
+
         const commentSnap = await all("posts", dc.id, "comments");
         _posts.push({
           id: dc.id,
@@ -284,6 +291,7 @@ const Home = () => {
           liked: Array.isArray(d.liked_by_ids)
             ? d.liked_by_ids.includes(userId)
             : false,
+          shared:shared,
           showComments: false,
           comments: commentSnap.docs.map((_comment: any) => ({
             id: _comment.id,
@@ -291,6 +299,7 @@ const Home = () => {
           })),
           date_ago: computeTimePassed(d.date.toDate()),
         });
+        
       }
 
       setPosts(_posts);
@@ -422,11 +431,11 @@ const Home = () => {
     //     p.id === post.id ? { ...p, sharesCount: p.sharesCount + 1 } : p
     //   )
     // );
-    // // Navigate to share-post screen and pass full post data
-    // router.push({
-    //   pathname: "/usable/share-post",
-    //   params: { post: JSON.stringify(post) },
-    // });
+    // Navigate to share-post screen and pass full post data
+    router.push({
+      pathname: "/usable/share-post",
+      params: { post: JSON.stringify(post) },
+    });
   };
 
   const openDropdown = (event: any, postId: string) => {
@@ -487,6 +496,102 @@ const Home = () => {
       Alert.alert("Error", "Failed to delete post");
     }
   };
+
+  const renderShared = (item: any) => {
+    const maxImagesToShow = 3;
+    const extraImages = (item.img_paths ?? []).length - maxImagesToShow;
+
+    return (
+      <View style={styles.sharedPostCard}>
+        <View style={styles.postHeader}>
+          <Pressable
+            style={{ flexDirection: "row", alignItems: "center" }}
+            onPress={() => handleSeeProfile(item)}
+          >
+            {item.creator_img_path ? (
+              <Image
+                source={{ uri: item.creator_img_path }}
+                style={styles.profileImage}
+              />
+            ) : (
+              <View style={styles.profileImage} />
+            )}
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginLeft: 8,
+                flex: 1,
+                gap: 10,
+              }}
+            >
+              <View>
+                <Text style={styles.userName}>{item.creator_name}</Text>
+                <Text style={styles.postTime}>{item.date_ago}</Text>
+              </View>
+            </View>
+          </Pressable>
+          </View>
+
+        {/* Content */}
+        <Text style={styles.postContent}>{item.body}</Text>
+
+        {/* Tagged Pets */}
+        {item.pets && item.pets.length > 0 && (
+          <View style={styles.taggedPetsContainer}>
+            {item.pets.map((pet: any) => (
+              <TouchableOpacity
+                key={pet.id}
+                style={styles.petChip}
+                onPress={() => console.log("Go to pet profile:", pet.name)}
+              >
+                {pet.img_path ? (
+                  <Image
+                    source={{ uri: pet.img_path }}
+                    style={styles.petAvatar}
+                  />
+                ) : (
+                  <View style={styles.petAvatar} />
+                )}
+                <Text style={styles.petName}>{pet.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Images Grid */}
+        {item.img_paths && item.img_paths.length > 0 && (
+          <View style={styles.imageGrid}>
+            {item.img_paths
+              .slice(0, maxImagesToShow)
+              .map((img: any, idx: number) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={styles.imageWrapper}
+                  onPress={() => {
+                    setSelectedPostImages(item.img_paths ?? []);
+                    setSelectedIndex(idx);
+                    setImageModalVisible(true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Image
+                    source={{ uri: img }}
+                    style={styles.gridImage}
+                    resizeMode="cover"
+                  />
+                  {idx === maxImagesToShow - 1 && extraImages > 0 && (
+                    <View style={styles.overlay}>
+                      <Text style={styles.overlayText}>+{extraImages}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+          </View>
+        )}
+      </View>)
+      }
 
   const renderPost = ({ item }: any) => {
     const maxImagesToShow = 3;
@@ -635,6 +740,8 @@ const Home = () => {
               ))}
           </View>
         )}
+
+        {item.shared && renderShared(item.shared)}
 
         {/* Actions */}
         <View style={styles.actionsRow}>
@@ -874,7 +981,6 @@ const Home = () => {
         (() => {
           const selectedPost = posts.find((p: any) => p.id === selectedPostId);
           const isMyPost = selectedPost?.creator_id === userId;
-          console.log(selectedPost?.creator_id);
 
           return (
             <PostDropdown
@@ -972,6 +1078,18 @@ const styles = StyleSheet.create({
     marginTop: 5,
     padding: 10,
     borderRadius: 10,
+    width: "95%",
+    alignSelf: "center",
+  },
+  sharedPostCard: {
+    borderWidth: 1,
+    borderBottomWidth:0,
+    borderColor: Colors.lightGray,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    borderBottomRightRadius:0,
+    borderBottomLeftRadius:0,
     width: "95%",
     alignSelf: "center",
   },

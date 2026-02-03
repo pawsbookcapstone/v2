@@ -62,14 +62,6 @@ const CreateAdoptionPost = () => {
         createdAt: serverTimestamp(),
         petImage: finalImage,
       });
-      console.log("Post Created:", {
-        image,
-        caption,
-        petCategory,
-        userId,
-        userName,
-        userImagePath,
-      });
       router.replace("/pet-owner/(menu)/adapt");
     } catch (error) {
       console.error("Failed to create appointment:", error);

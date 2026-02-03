@@ -106,8 +106,6 @@ const AddPet = () => {
   const addVaccine = () => setVaccines([...vaccines, { name: "", date: "" }]);
 
   const removeVaccine = (index: number) => {
-    console.log(index);
-
     setVaccines(vaccines.filter((_, i) => i !== index));
   };
 

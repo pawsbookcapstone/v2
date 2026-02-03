@@ -138,7 +138,6 @@ const Search = () => {
             };
           }),
         );
-        console.log(recentSearches);
       } catch (e) {
         console.log("Failed to fetch recent searches:", e);
       }
@@ -265,13 +264,7 @@ const Search = () => {
     );
 
     try {
-      addNotif({
-        receiver_id: item.id,
-        href: "/pet-owner/my-friends",
-        type: "Sent Friend Request",
-      });
-
-      await add("friends").value({
+      const res = await add("friends").value({
         users: [userId, item.id],
         date_requested: serverTimestamp(),
         requested_by_id: userId,
@@ -288,6 +281,16 @@ const Search = () => {
             img_path: userImagePath ?? "",
           },
         },
+      });
+      console.log(res.id);
+      
+      addNotif({
+        receiver_id: item.id,
+        href: "/pet-owner/my-friends",
+        type: "Sent Friend Request",
+        params: {
+          id: res.id,
+        }
       });
     } catch (e) {
       Alert.alert("Error", String(e));
