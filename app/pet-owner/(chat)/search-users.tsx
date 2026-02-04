@@ -1,9 +1,10 @@
 import { useAppContext } from "@/AppsProvider";
-import { add, all, serverTimestamp } from "@/helpers/db";
+import { add, all, get, orderBy, serverTimestamp, set } from "@/helpers/db";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { screens, ShadowStyle } from "@/shared/styles/styles";
 import { router } from "expo-router";
+import { limit } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -45,7 +46,7 @@ const Search = () => {
   const [search, setSearch] = useState("");
   const [searched, setSearched] = useState<any>([]);
   const [users, setUsers] = useState<any>([]);
-  const [recentSearches, setRecentSearches] = useState(initialSearches);
+  const [recentSearches, setRecentSearches] = useState<any>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ x: number; y: number }>({
@@ -66,12 +67,28 @@ const Search = () => {
           };
         })
       );
+
+      const rsnap = await get("users", userId, "recent_searches").where(
+          orderBy("date", "desc"),
+          limit(10),
+        );
+
+        setRecentSearches(
+          rsnap.docs.map((doc) => {
+            const d = doc.data();
+            return {
+              id: doc.id,
+              name: d.name,
+              img_path: d.img_path ?? "",
+            };
+          }),
+        );
     };
     fetchUsers();
   }, []);
 
   const handleDelete = (id: string) => {
-    setRecentSearches((prev) => prev.filter((item) => item.id !== id));
+    setRecentSearches((prev:any) => prev.filter((item:any) => item.id !== id));
     setShowDropdown(false);
   };
 
@@ -90,6 +107,22 @@ const Search = () => {
   };
 
   const handleSelectUser = async (otherUser: any) => {
+    set("users", userId, "recent_searches", otherUser.id).value({
+      name: otherUser.name,
+      img_path: otherUser.img_path ?? null,
+      date: serverTimestamp(),
+    });
+    router.push({
+      pathname: "/pet-owner/chat-field",
+      params: {
+        otherUserId: otherUser.id,
+        otherUserName: otherUser.name,
+        otherUserImgPath: otherUser.img_path,
+      },
+    });
+  };
+
+  const handleRecentSelectUser = async (otherUser: any) => {
     router.push({
       pathname: "/pet-owner/chat-field",
       params: {
@@ -101,12 +134,14 @@ const Search = () => {
   };
 
   const renderItem = ({ item }: { item: (typeof initialSearches)[0] }) => (
-    <View style={styles.item}>
-      <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-        <Image source={{ uri: item.img_path }} style={styles.avatar} />
-        <Text style={styles.name}>{item.name}</Text>
+    <TouchableOpacity onPress={() => handleRecentSelectUser(item)}>
+      <View style={styles.item}>
+        <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+          <Image source={{ uri: item.img_path }} style={styles.avatar} />
+          <Text style={styles.name}>{item.name}</Text>
+        </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderSearchedItem = ({ item }: any) => (
