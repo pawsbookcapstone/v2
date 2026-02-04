@@ -35,76 +35,147 @@ const addFriend = () => {
   }, []);
 
   // 🔄 Handle Pull-to-Refresh
+  // const onRefresh = async () => {
+  //   setRefreshing(true);
+  //   try {
+  //     const snap = await all("friends");
+
+  //     let _friendRequestsData: any[] = [];
+  //     let _friends: any[] = [];
+  //     let _usersFriends: Record<string, number> = {};
+
+  //     for (const t of snap.docs) {
+  //       const d = t.data();
+  //       const [u1, u2] = d.users;
+
+  //       // Safely get other user's info
+  //       const otherUser = d.details?.[u1] ?? {
+  //         name: d.userName,
+  //         img_path: d.userImagePath,
+  //       };
+
+  //       // Only show requests where the current user is the receiver
+  //       if (!d.confirmed && u2 === userId) {
+  //         const requestTime = d.date_requested?.toDate
+  //           ? computeTimePassed(d.date_requested.toDate())
+  //           : "Just now";
+
+  //         _friendRequestsData.push({
+  //           id: t.id,
+  //           other_user_id: u1,
+  //           other_user: {
+  //             name: otherUser.name,
+  //             img_path: otherUser.img_path ?? "",
+  //           },
+  //           time: requestTime,
+  //           mutual_friends: 0,
+  //         });
+  //         continue;
+  //       }
+
+  //       if (!d.confirmed) continue;
+
+  //       // Track confirmed friends
+  //       if (u1 === userId || u2 === userId) {
+  //         _usersFriends[u1 === userId ? u2 : u1] = 1;
+  //       } else {
+  //         _friends.push(d.users);
+  //       }
+  //     }
+
+  //     // Calculate mutual friends
+  //     for (const fr of _friendRequestsData) {
+  //       for (const usersPair of _friends) {
+  //         if (!Array.isArray(usersPair)) continue;
+  //         const [u1, u2] = usersPair;
+  //         if (
+  //           (u1 === fr.other_user_id && _usersFriends[u2]) ||
+  //           (u2 === fr.other_user_id && _usersFriends[u1])
+  //         ) {
+  //           fr.mutual_friends++;
+  //         }
+  //       }
+  //     }
+
+  //     setFriendRequests(_friendRequestsData);
+  //   } catch (e) {
+  //     Alert.alert("Error", e + "");
+  //     console.log("Error", e);
+  //   } finally {
+  //     setRefreshing(false);
+  //   }
+  // };
   const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const snap = await all("friends");
+  setRefreshing(true);
 
-      let _friendRequestsData: any[] = [];
-      let _friends: any[] = [];
-      let _usersFriends: Record<string, number> = {};
+  try {
+    const snap = await all("friends");
 
-      for (const t of snap.docs) {
-        const d = t.data();
-        const [u1, u2] = d.users;
+    const _friendRequests: any[] = [];
+    const myFriends = new Set<string>();
+    const connections = new Map<string, Set<string>>();
 
-        // Safely get other user's info
+    for (const doc of snap.docs) {
+      const d = doc.data();
+      const [u1, u2] = d.users;
+
+      // Track confirmed friendships as graph
+      if (d.confirmed) {
+        if (!connections.has(u1)) connections.set(u1, new Set());
+        if (!connections.has(u2)) connections.set(u2, new Set());
+
+        connections.get(u1)!.add(u2);
+        connections.get(u2)!.add(u1);
+
+        if (u1 === userId) myFriends.add(u2);
+        if (u2 === userId) myFriends.add(u1);
+
+        continue;
+      }
+
+      // Incoming friend requests
+      if (!d.confirmed && u2 === userId) {
         const otherUser = d.details?.[u1] ?? {
           name: d.userName,
           img_path: d.userImagePath,
         };
 
-        // Only show requests where the current user is the receiver
-        if (!d.confirmed && u2 === userId) {
-          const requestTime = d.date_requested?.toDate
+        _friendRequests.push({
+          id: doc.id,
+          other_user_id: u1,
+          other_user: {
+            name: otherUser.name,
+            img_path: otherUser.img_path ?? "",
+          },
+          time: d.date_requested?.toDate
             ? computeTimePassed(d.date_requested.toDate())
-            : "Just now";
-
-          _friendRequestsData.push({
-            id: t.id,
-            other_user_id: u1,
-            other_user: {
-              name: otherUser.name,
-              img_path: otherUser.img_path ?? "",
-            },
-            time: requestTime,
-            mutual_friends: 0,
-          });
-          continue;
-        }
-
-        if (!d.confirmed) continue;
-
-        // Track confirmed friends
-        if (u1 === userId || u2 === userId) {
-          _usersFriends[u1 === userId ? u2 : u1] = 1;
-        } else {
-          _friends.push(d.users);
-        }
+            : "Just now",
+          mutual_friends: 0,
+        });
       }
-
-      // Calculate mutual friends
-      for (const fr of _friendRequestsData) {
-        for (const usersPair of _friends) {
-          if (!Array.isArray(usersPair)) continue;
-          const [u1, u2] = usersPair;
-          if (
-            (u1 === fr.other_user_id && _usersFriends[u2]) ||
-            (u2 === fr.other_user_id && _usersFriends[u1])
-          ) {
-            fr.mutual_friends++;
-          }
-        }
-      }
-
-      setFriendRequests(_friendRequestsData);
-    } catch (e) {
-      Alert.alert("Error", e + "");
-      console.log("Error", e);
-    } finally {
-      setRefreshing(false);
     }
-  };
+
+    // Calculate mutual friends efficiently
+    for (const req of _friendRequests) {
+      const requesterFriends = connections.get(req.other_user_id);
+      if (!requesterFriends) continue;
+
+      for (const mf of myFriends) {
+        if (requesterFriends.has(mf)) {
+          req.mutual_friends++;
+        }
+      }
+    }
+
+    setFriendRequests(_friendRequests);
+  } catch (e) {
+    console.error(e);
+    Alert.alert("Error", String(e));
+  } finally {
+    setRefreshing(false);
+  }
+};
+
 
   const handleConfirm = (id: string) => {
     // setStatus((prev) => ({ ...prev, [id]: "confirmed" }));

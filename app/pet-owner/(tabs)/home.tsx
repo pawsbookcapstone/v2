@@ -255,65 +255,155 @@ const Home = () => {
   const addNotif = useNotifHook();
   const hasNotif = useNotificationHook()
 
+  // const onRefresh = async () => {
+  //   setLoading(true);
+  //   try {
+  //     const friendsSnap = await get("friends").where(
+  //       where("users", "array-contains", userId),
+  //       where("confirmed", "==", true),
+  //     );
+  //     const friend_ids = friendsSnap.docs.map((d) => {
+  //       const t = d.data();
+  //       return t.users[0] === userId ? t.users[1] : t.users[0];
+  //     });
+  //     friend_ids.push(userId);
+
+  //     const snap = await get("posts").where(
+  //       where("creator_id", "in", friend_ids),
+  //       orderBy("date", "desc"),
+  //     );
+  //     const _posts: any = [];
+
+  //     for (const i in snap.docs) {
+  //       const dc = snap.docs[i];
+  //       const d = dc.data();
+
+  //       let shared = null
+  //       if (d.shared_post_id){
+  //         const shareSnap = (await find('posts', d.shared_post_id))
+  //         shared = shareSnap.data()
+  //       }
+
+  //       const commentSnap = await all("posts", dc.id, "comments");
+  //       _posts.push({
+  //         id: dc.id,
+  //         ...d,
+  //         liked: Array.isArray(d.liked_by_ids)
+  //           ? d.liked_by_ids.includes(userId)
+  //           : false,
+  //         shared:shared,
+  //         showComments: false,
+  //         comments: commentSnap.docs.map((_comment: any) => ({
+  //           id: _comment.id,
+  //           ..._comment.data(),
+  //         })),
+  //         date_ago: computeTimePassed(d.date.toDate()),
+  //       });
+        
+  //     }
+
+  //     setPosts(_posts);
+  //   } finally {
+  //     // catch (e) {
+  //     //   Alert.alert("Error", e + "");
+  //     // }
+  //     setLoading(false);
+  //   }
+  //   // setTimeout(() => {
+  //   //   setPosts([]);
+  //   //   setLoading(false);
+  //   // }, 1500);
+  // };
+
   const onRefresh = async () => {
     setLoading(true);
+
     try {
+      // 1️⃣ Fetch friends
       const friendsSnap = await get("friends").where(
         where("users", "array-contains", userId),
         where("confirmed", "==", true),
       );
-      const friend_ids = friendsSnap.docs.map((d) => {
-        const t = d.data();
-        return t.users[0] === userId ? t.users[1] : t.users[0];
+
+      const friendIds = friendsSnap.docs.map((d) => {
+        const { users } = d.data();
+        return users[0] === userId ? users[1] : users[0];
       });
-      friend_ids.push(userId);
 
-      const snap = await get("posts").where(
-        where("creator_id", "in", friend_ids),
-        orderBy("date", "desc"),
+      friendIds.push(userId);
+
+      const chunk = (arr: any[], size = 10) =>
+        Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+          arr.slice(i * size, i * size + size)
+        );
+
+      // 2️⃣ Fetch posts (handle Firestore IN limit)
+      const postSnaps = await Promise.all(
+        chunk(friendIds).map((ids:string[]) =>
+          get("posts").where(
+            where("creator_id", "in", ids),
+            orderBy("date", "desc"),
+          )
+        )
       );
-      const _posts: any = [];
 
-      for (const i in snap.docs) {
-        const dc = snap.docs[i];
+      const postsDocs = postSnaps.flatMap((s) => s.docs);
+
+      // 3️⃣ Collect shared post IDs
+      const sharedIds = [
+        ...new Set(
+          postsDocs
+            .map((d) => d.data().shared_post_id)
+            .filter(Boolean)
+        ),
+      ];
+
+      // 4️⃣ Fetch shared posts in parallel
+      const sharedMap: Record<string, any> = {};
+      await Promise.all(
+        sharedIds.map(async (id:any) => {
+          const snap = await find("posts", id);
+          if (snap.exists()) sharedMap[id] = snap.data();
+        })
+      );
+
+      // 5️⃣ Fetch comments in parallel
+      const commentsMap: Record<string, any[]> = {};
+      await Promise.all(
+        postsDocs.map(async (dc:any) => {
+          const commentSnap = await all("posts", dc.id, "comments");
+          commentsMap[dc.id] = commentSnap.docs.map((c: any) => ({
+            id: c.id,
+            ...c.data(),
+          }));
+        })
+      );
+
+      // 6️⃣ Build final posts
+      const _posts = postsDocs.map((dc:any) => {
         const d = dc.data();
 
-        let shared = null
-        if (d.shared_post_id){
-          const shareSnap = (await find('posts', d.shared_post_id))
-          shared = shareSnap.data()
-        }
-
-        const commentSnap = await all("posts", dc.id, "comments");
-        _posts.push({
+        return {
           id: dc.id,
           ...d,
           liked: Array.isArray(d.liked_by_ids)
             ? d.liked_by_ids.includes(userId)
             : false,
-          shared:shared,
+          shared: d.shared_post_id ? sharedMap[d.shared_post_id] : null,
           showComments: false,
-          comments: commentSnap.docs.map((_comment: any) => ({
-            id: _comment.id,
-            ..._comment.data(),
-          })),
+          comments: commentsMap[dc.id] ?? [],
           date_ago: computeTimePassed(d.date.toDate()),
-        });
-        
-      }
+        };
+      });
 
       setPosts(_posts);
+    } catch (e) {
+      console.error(e);
     } finally {
-      // catch (e) {
-      //   Alert.alert("Error", e + "");
-      // }
       setLoading(false);
     }
-    // setTimeout(() => {
-    //   setPosts([]);
-    //   setLoading(false);
-    // }, 1500);
   };
+
 
   useEffect(() => {
     onRefresh();

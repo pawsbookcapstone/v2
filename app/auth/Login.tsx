@@ -45,12 +45,12 @@ const Login = () => {
   };
 
   const onLogin = async () => {
-    setLoading(true);
     if (!email || !password) {
       Alert.alert("Error", "Please fill in all fields");
       return;
     }
-
+    
+    setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(
         auth,
@@ -91,12 +91,15 @@ const Login = () => {
       setUserImagePath(user.img_path);
       setLoading(false);
       router.replace({
+        // pathname: "/other-user/home",
         pathname: "/pet-owner/(tabs)/home",
         params: { imagepath: setUserImagePath },
       });
     } catch (e) {
       Alert.alert("Error", e + "");
       console.log(e);
+    }
+    finally{
       setLoading(false);
     }
   };
