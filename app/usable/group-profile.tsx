@@ -326,23 +326,29 @@ export default function GroupProfile() {
         </View>
 
         {/*  Add Post (MyGroup only) */}
-        {type === "MyGroup" && (
-          <View style={styles.addPost}>
-            <Pressable
-              style={styles.postInputRow}
-              onPress={() => router.push("/usable/anonymous-posting")}
-            >
-              <Image
-                source={{ uri: myProfileImage }}
-                style={styles.myProfileImage}
-              />
-              <Text style={styles.postInputPlaceholder}>
-                What's on your mind?
-              </Text>
-              <MaterialIcons name="image" size={24} color={"#08CB00"} />
-            </Pressable>
-          </View>
-        )}
+        {type === "MyGroup" ||
+          (type === "JoinedGroup" && (
+            <View style={styles.addPost}>
+              <Pressable
+                style={styles.postInputRow}
+                onPress={() =>
+                  router.push({
+                    pathname: "/usable/anonymous-posting",
+                    params: { id: groupId },
+                  })
+                }
+              >
+                <Image
+                  source={{ uri: userImagePath }}
+                  style={styles.myProfileImage}
+                />
+                <Text style={styles.postInputPlaceholder}>
+                  What's on your mind?
+                </Text>
+                <MaterialIcons name="image" size={24} color={"#08CB00"} />
+              </Pressable>
+            </View>
+          ))}
 
         {/*  Posts Section */}
         <View style={styles.postsSection}>
@@ -457,7 +463,7 @@ export default function GroupProfile() {
                     {/* Add comment */}
                     <View style={styles.addCommentRow}>
                       <Image
-                        source={{ uri: myProfileImage }}
+                        source={{ uri: userImagePath }}
                         style={styles.commentProfile}
                       />
                       <TextInput

@@ -1,10 +1,12 @@
+import { useAppContext } from "@/AppsProvider";
+import { set } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { screens } from "@/shared/styles/styles";
 import { Entypo, FontAwesome6 } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
@@ -15,7 +17,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 const myProfileImage = "https://randomuser.me/api/portraits/men/32.jpg";
@@ -23,10 +25,13 @@ const myProfileName = "John Doe";
 
 const AnonymousPosting = () => {
   const router = useRouter();
-
+  const { userId, userName, userImagePath } = useAppContext();
+  const { id } = useLocalSearchParams();
   const [content, setContent] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [showExitModal, setShowExitModal] = useState(false);
+
+  const groupId = Array.isArray(id) ? id[0] : id;
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -53,30 +58,52 @@ const AnonymousPosting = () => {
     }
   };
 
-  const handlePost = () => {
+  const handlePost = async () => {
     if (!content.trim() && images.length === 0) {
       Alert.alert("Empty Post", "Please add some text or an image.");
       return;
     }
 
-    const newPost = {
-      id: Date.now().toString(),
-      user: myProfileName,
-      profileImage: myProfileImage,
-      time: "Just now",
-      content,
-      images,
+    try {
+      await set("groups", groupId, "posts", userId).value({
+        id: Date.now().toString(),
+        user: myProfileName,
+        profileImage: myProfileImage,
+        time: "Just now",
+        content,
+        images,
 
-      liked: false,
-      likesCount: 0,
-      comments: [],
-      showComments: false,
-    };
+        liked: false,
+        likesCount: 0,
+        comments: [],
+        showComments: false,
+      });
 
-    router.replace({
-      pathname: "/pet-owner/(tabs)/home",
-      params: { newPost: JSON.stringify(newPost) },
-    });
+      //       const newPost = {
+      //   id: Date.now().toString(),
+      //   user: myProfileName,
+      //   profileImage: myProfileImage,
+      //   time: "Just now",
+      //   content,
+      //   images,
+
+      //   liked: false,
+      //   likesCount: 0,
+      //   comments: [],
+      //   showComments: false,
+      // };
+
+      router.replace({
+        pathname: "/usable/group-profile",
+      });
+      // ToastAndroid.show("Joined group successfully!", ToastAndroid.SHORT);
+      // router.push({
+      //   pathname: "/pet-owner/(menu)/community",
+      // });
+    } catch (error) {
+      console.error("Error joining group:", error);
+      alert("Failed to send join request. Try again.");
+    }
   };
 
   const handleBack = () => {
@@ -108,9 +135,9 @@ const AnonymousPosting = () => {
       <View style={styles.container}>
         {/* Profile Row */}
         <View style={styles.profileRow}>
-          <Image source={{ uri: myProfileImage }} style={styles.avatar} />
+          <Image source={{ uri: userImagePath }} style={styles.avatar} />
           <View>
-            <Text style={styles.profileName}>{myProfileName}</Text>
+            <Text style={styles.profileName}>{userName}</Text>
           </View>
         </View>
 
