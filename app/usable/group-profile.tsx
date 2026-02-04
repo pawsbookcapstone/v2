@@ -1,3 +1,5 @@
+import { useAppContext } from "@/AppsProvider";
+import { remove, serverTimestamp, set, update } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
@@ -47,22 +49,30 @@ interface Post {
 }
 
 export default function GroupProfile() {
-  const { id, title, members, profile, type, privacy } = useLocalSearchParams();
+  const { userId, userName, userImagePath } = useAppContext();
+  const { id, title, members, profile, type, privacy, questions } =
+    useLocalSearchParams();
   const imageUri = Array.isArray(profile) ? profile[0] : profile;
   const [joinRequestSent, setJoinRequestSent] = useState(false);
-const [imageModalVisible, setImageModalVisible] = useState(false);
-const [selectedPostImages, setSelectedPostImages] = useState<string[]>([]);
-const [selectedIndex, setSelectedIndex] = useState(0);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [selectedPostImages, setSelectedPostImages] = useState<string[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [answers, setAnswers] = useState(["", "", ""]);
 
-  const membershipQuestions = [
-    "Why do you want to join this group?",
-    "Do you have any pets? If yes, what kind?",
-    "How did you hear about this group?",
-  ];
+  let membershipQuestions: string[] = [];
 
+  if (typeof questions === "string") {
+    membershipQuestions = questions.split(",");
+  } else if (Array.isArray(questions)) {
+    membershipQuestions = questions;
+  }
+  const groupId = Array.isArray(id) ? id[0] : id;
+
+  // useEffect(() => {
+  //   console.log("ID", id);
+  // }, []);
   const [posts, setPosts] = useState<Post[]>([
     {
       id: "1",
@@ -96,8 +106,8 @@ const [selectedIndex, setSelectedIndex] = useState(0);
               liked: !post.liked,
               likes: post.liked ? post.likes - 1 : post.likes + 1,
             }
-          : post
-      )
+          : post,
+      ),
     );
   };
 
@@ -107,8 +117,8 @@ const [selectedIndex, setSelectedIndex] = useState(0);
       prev.map((post) =>
         post.id === postId
           ? { ...post, showComments: !post.showComments }
-          : post
-      )
+          : post,
+      ),
     );
   };
 
@@ -130,21 +140,63 @@ const [selectedIndex, setSelectedIndex] = useState(0);
           };
         }
         return post;
-      })
+      }),
     );
   };
 
-  const confirmLeaveGroup = () => {
-    setShowLeaveModal(false);
-    router.back();
+  const confirmLeaveGroup = async () => {
+    try {
+      await remove("users", userId, "joined-groups", groupId);
+      await update("groups", groupId).value({
+        members: Number(members) - 1,
+      });
+
+      setShowLeaveModal(false);
+      router.push("/pet-owner/(menu)/community");
+      console.log("Item deleted successfully!");
+    } catch (error) {
+      console.error("Failed to delete item:", error);
+      // return;
+    }
+
+    // router.back();
   };
 
   // 🟢 Join group logic
-  const handleJoinGroup = () => {
-    if (privacy === "private") {
+  const handleJoinGroup = async () => {
+    console.log(privacy);
+    if (privacy === "Private") {
       setShowQuestionModal(true);
     } else {
-      ToastAndroid.show("Joined group successfully!", ToastAndroid.SHORT);
+      try {
+        const joinRequest = {
+          userId,
+          joinedAt: serverTimestamp(),
+        };
+
+        await set("groups", groupId, "members", userId).value({
+          userId,
+          joinedAt: serverTimestamp(),
+        });
+
+        await set("users", userId, "joined-groups", groupId).value({
+          groupId,
+          groupName: title,
+          joinedAt: serverTimestamp(),
+        });
+
+        await update("groups", groupId).value({
+          members: Number(members) + 1,
+        });
+
+        ToastAndroid.show("Joined group successfully!", ToastAndroid.SHORT);
+        router.push({
+          pathname: "/pet-owner/(menu)/community",
+        });
+      } catch (error) {
+        console.error("Error joining group:", error);
+        alert("Failed to send join request. Try again.");
+      }
     }
     if (joinRequestSent) {
       // cancel request
@@ -154,13 +206,42 @@ const [selectedIndex, setSelectedIndex] = useState(0);
     }
   };
 
-  const handleSubmitAnswers = () => {
+  const handleSubmitAnswers = async () => {
     setShowQuestionModal(false);
-    ToastAndroid.show(
-      "Join request sent! Waiting for admin approval.",
-      ToastAndroid.LONG
-    );
-    setAnswers(["", "", ""]);
+
+    try {
+      const cleanAnswers = answers.map((a) => a.trim()).filter(Boolean);
+
+      const joinRequest = {
+        userId,
+        answers: cleanAnswers,
+        joinedAt: serverTimestamp(),
+      };
+
+      await set("groups", groupId, "join-request", userId).value({
+        userId,
+        answers: cleanAnswers,
+        joinedAt: serverTimestamp(),
+      });
+
+      ToastAndroid.show(
+        "Join request sent! Waiting for admin approval.",
+        ToastAndroid.LONG,
+      );
+
+      setAnswers(Array(answers.length).fill(""));
+
+      router.push({
+        pathname: "/pet-owner/(menu)/community",
+      });
+    } catch (error) {
+      console.error("Error joining group:", error);
+      alert("Failed to send join request. Try again.");
+    }
+  };
+
+  const handleCreate = async () => {
+    // if (!groupName.trim()) return;
   };
 
   return (
@@ -168,7 +249,9 @@ const [selectedIndex, setSelectedIndex] = useState(0);
       <HeaderLayout noBorderRadius bottomBorder>
         <HeaderWithActions
           title={title as string}
-          onBack={() => router.back()}
+          onBack={() => {
+            router.push("/pet-owner/(menu)/community");
+          }}
           centerTitle
         />
       </HeaderLayout>
@@ -192,55 +275,54 @@ const [selectedIndex, setSelectedIndex] = useState(0);
 
           {/*  Leave / Join button */}
           <Pressable
-  style={[
-    styles.leaveButton,
-    {
-      backgroundColor:
-        type === "JoinedGroup"
-          ? "#FF3F33" // red for leave
-          : type === "MyGroup"
-          ? Colors.primary // blue for manage
-          : Colors.primary, // blue for suggestion/join
-    },
-  ]}
-  onPress={() => {
-    if (type === "Suggestion") {
-      handleJoinGroup();
-    } else if (type === "JoinedGroup") {
-      setShowLeaveModal(true);
-    } else if (type === "MyGroup") {
-      // router.push("/pet-owner/(menu)/manage-group");
-    }
-  }}
->
-  {type === "Suggestion" && (
-    <>
-      <FontAwesome5
-        name={joinRequestSent ? "user-times" : "users"}
-        size={15}
-        color="white"
-      />
-      <Text style={styles.btnText}>
-        {joinRequestSent ? "Cancel Request" : "Join Group"}
-      </Text>
-    </>
-  )}
+            style={[
+              styles.leaveButton,
+              {
+                backgroundColor:
+                  type === "JoinedGroup"
+                    ? "#FF3F33" // red for leave
+                    : type === "MyGroup"
+                      ? Colors.primary // blue for manage
+                      : Colors.primary, // blue for suggestion/join
+              },
+            ]}
+            onPress={() => {
+              if (type === "Suggestion") {
+                handleJoinGroup();
+              } else if (type === "JoinedGroup") {
+                setShowLeaveModal(true);
+              } else if (type === "MyGroup") {
+                // router.push("/pet-owner/(menu)/manage-group");
+              }
+            }}
+          >
+            {type === "Suggestion" && (
+              <>
+                <FontAwesome5
+                  name={joinRequestSent ? "user-times" : "users"}
+                  size={15}
+                  color="white"
+                />
+                <Text style={styles.btnText}>
+                  {joinRequestSent ? "Cancel Request" : "Join Group"}
+                </Text>
+              </>
+            )}
 
-  {type === "JoinedGroup" && (
-    <>
-      <Entypo name="log-out" size={15} color="white" />
-      <Text style={styles.btnText}>Leave Group</Text>
-    </>
-  )}
+            {type === "JoinedGroup" && (
+              <>
+                <Entypo name="log-out" size={15} color="white" />
+                <Text style={styles.btnText}>Leave Group</Text>
+              </>
+            )}
 
-  {type === "MyGroup" && (
-    <>
-      <Ionicons name="settings-outline" size={16} color="white" />
-      <Text style={styles.btnText}>Manage Group</Text>
-    </>
-  )}
-</Pressable>
-
+            {type === "MyGroup" && (
+              <>
+                <Ionicons name="settings-outline" size={16} color="white" />
+                <Text style={styles.btnText}>Manage Group</Text>
+              </>
+            )}
+          </Pressable>
         </View>
 
         {/*  Add Post (MyGroup only) */}
@@ -263,133 +345,143 @@ const [selectedIndex, setSelectedIndex] = useState(0);
         )}
 
         {/*  Posts Section */}
-  <View style={styles.postsSection}>
-  {posts.map((post) => {
-    const postImages = post.image ? [post.image] : [];
-    const maxImagesToShow = 3;
-    const extraImages = postImages.length - maxImagesToShow;
+        <View style={styles.postsSection}>
+          {posts.map((post) => {
+            const postImages = post.image ? [post.image] : [];
+            const maxImagesToShow = 3;
+            const extraImages = postImages.length - maxImagesToShow;
 
-    return (
-      <View key={post.id} style={styles.postCard}>
-        {/* Header */}
-        <View style={styles.postHeader}>
-          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-            <Image
-              source={{ uri: post.profileImage }}
-              style={styles.profileImage}
-            />
-            <View style={{ marginLeft: 8 }}>
-              <Text style={styles.userName}>{post.user}</Text>
-              <Text style={styles.postTime}>{post.time}</Text>
-            </View>
-          </View>
+            return (
+              <View key={post.id} style={styles.postCard}>
+                {/* Header */}
+                <View style={styles.postHeader}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      flex: 1,
+                    }}
+                  >
+                    <Image
+                      source={{ uri: post.profileImage }}
+                      style={styles.profileImage}
+                    />
+                    <View style={{ marginLeft: 8 }}>
+                      <Text style={styles.userName}>{post.user}</Text>
+                      <Text style={styles.postTime}>{post.time}</Text>
+                    </View>
+                  </View>
 
-          <Entypo
-            name="dots-three-horizontal"
-            size={18}
-            color="#555"
-            style={{ marginRight: 5 }}
-          />
-        </View>
-
-        {/* Content */}
-        {post.content ? (
-          <Text style={styles.postContent}>{post.content}</Text>
-        ) : null}
-
-        {/* Image Grid */}
-        {postImages.length > 0 && (
-<View style={styles.imageGrid}>
-  {postImages.slice(0, maxImagesToShow).map((img, idx) => (
-    <Pressable
-      key={idx}
-      style={styles.imageWrapper}
-      onPress={() => {
-        setSelectedPostImages(postImages);
-        setSelectedIndex(idx);
-        setImageModalVisible(true);
-      }}
-    >
-      <Image source={{ uri: img }} style={styles.gridImage} />
-      {idx === maxImagesToShow - 1 && extraImages > 0 && (
-        <View style={styles.overlay}>
-          <Text style={styles.overlayText}>+{extraImages}</Text>
-        </View>
-      )}
-    </Pressable>
-  ))}
-</View>
-
-        )}
-
-        {/* Actions */}
-        <View style={styles.actionsRow}>
-          <Pressable
-            onPress={() => toggleLike(post.id)}
-            style={styles.actionBtn}
-          >
-            <Ionicons
-              name={post.liked ? "heart-sharp" : "heart-outline"}
-              size={23}
-              color={post.liked ? "red" : "black"}
-            />
-            <Text style={styles.countText}>{post.likes}</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => toggleComments(post.id)}
-            style={styles.actionBtn}
-          >
-            <Ionicons name="chatbubble-outline" size={20} color="black" />
-            <Text style={styles.countText}>{post.comments.length}</Text>
-          </Pressable>
-        </View>
-
-        {/* Comments */}
-        {post.showComments && (
-          <View style={styles.commentSection}>
-            {post.comments.map((comment) => (
-              <View key={comment.id} style={styles.commentRow}>
-                <Image
-                  source={{ uri: comment.profileImage }}
-                  style={styles.commentProfile}
-                />
-                <View style={styles.commentBubble}>
-                  <Text style={styles.commentUser}>{comment.user}</Text>
-                  <Text style={styles.commentText}>{comment.text}</Text>
+                  <Entypo
+                    name="dots-three-horizontal"
+                    size={18}
+                    color="#555"
+                    style={{ marginRight: 5 }}
+                  />
                 </View>
+
+                {/* Content */}
+                {post.content ? (
+                  <Text style={styles.postContent}>{post.content}</Text>
+                ) : null}
+
+                {/* Image Grid */}
+                {postImages.length > 0 && (
+                  <View style={styles.imageGrid}>
+                    {postImages.slice(0, maxImagesToShow).map((img, idx) => (
+                      <Pressable
+                        key={idx}
+                        style={styles.imageWrapper}
+                        onPress={() => {
+                          setSelectedPostImages(postImages);
+                          setSelectedIndex(idx);
+                          setImageModalVisible(true);
+                        }}
+                      >
+                        <Image source={{ uri: img }} style={styles.gridImage} />
+                        {idx === maxImagesToShow - 1 && extraImages > 0 && (
+                          <View style={styles.overlay}>
+                            <Text style={styles.overlayText}>
+                              +{extraImages}
+                            </Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+
+                {/* Actions */}
+                <View style={styles.actionsRow}>
+                  <Pressable
+                    onPress={() => toggleLike(post.id)}
+                    style={styles.actionBtn}
+                  >
+                    <Ionicons
+                      name={post.liked ? "heart-sharp" : "heart-outline"}
+                      size={23}
+                      color={post.liked ? "red" : "black"}
+                    />
+                    <Text style={styles.countText}>{post.likes}</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => toggleComments(post.id)}
+                    style={styles.actionBtn}
+                  >
+                    <Ionicons
+                      name="chatbubble-outline"
+                      size={20}
+                      color="black"
+                    />
+                    <Text style={styles.countText}>{post.comments.length}</Text>
+                  </Pressable>
+                </View>
+
+                {/* Comments */}
+                {post.showComments && (
+                  <View style={styles.commentSection}>
+                    {post.comments.map((comment) => (
+                      <View key={comment.id} style={styles.commentRow}>
+                        <Image
+                          source={{ uri: comment.profileImage }}
+                          style={styles.commentProfile}
+                        />
+                        <View style={styles.commentBubble}>
+                          <Text style={styles.commentUser}>{comment.user}</Text>
+                          <Text style={styles.commentText}>{comment.text}</Text>
+                        </View>
+                      </View>
+                    ))}
+
+                    {/* Add comment */}
+                    <View style={styles.addCommentRow}>
+                      <Image
+                        source={{ uri: myProfileImage }}
+                        style={styles.commentProfile}
+                      />
+                      <TextInput
+                        placeholder="Write a comment..."
+                        style={styles.commentInput}
+                        value={post.newComment}
+                        onChangeText={(text) =>
+                          setPosts((prev) =>
+                            prev.map((p) =>
+                              p.id === post.id ? { ...p, newComment: text } : p,
+                            ),
+                          )
+                        }
+                      />
+                      <Pressable onPress={() => handleAddComment(post.id)}>
+                        <Text style={styles.postCommentBtn}>Post</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
               </View>
-            ))}
-
-            {/* Add comment */}
-            <View style={styles.addCommentRow}>
-              <Image
-                source={{ uri: myProfileImage }}
-                style={styles.commentProfile}
-              />
-              <TextInput
-                placeholder="Write a comment..."
-                style={styles.commentInput}
-                value={post.newComment}
-                onChangeText={(text) =>
-                  setPosts((prev) =>
-                    prev.map((p) =>
-                      p.id === post.id ? { ...p, newComment: text } : p
-                    )
-                  )
-                }
-              />
-              <Pressable onPress={() => handleAddComment(post.id)}>
-                <Text style={styles.postCommentBtn}>Post</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-      </View>
-    );
-  })}
-</View>
-
+            );
+          })}
+        </View>
       </ScrollView>
 
       {/* 🚪 Leave Modal */}
@@ -467,38 +559,37 @@ const [selectedIndex, setSelectedIndex] = useState(0);
         </View>
       </Modal>
 
-{imageModalVisible && (
-  <Modal visible={imageModalVisible} transparent={true}>
-    <View style={styles.modalBackground}>
-      <ScrollView
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        contentOffset={{
-          x: selectedIndex * Dimensions.get("window").width,
-          y: 0,
-        }}
-      >
-        {selectedPostImages.map((uri, i) => (
-          <View key={i} style={styles.fullImageWrapper}>
-            <Image
-              source={{ uri }}
-              style={styles.fullImage}
-              resizeMode="contain"
-            />
+      {imageModalVisible && (
+        <Modal visible={imageModalVisible} transparent={true}>
+          <View style={styles.modalBackground}>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              contentOffset={{
+                x: selectedIndex * Dimensions.get("window").width,
+                y: 0,
+              }}
+            >
+              {selectedPostImages.map((uri, i) => (
+                <View key={i} style={styles.fullImageWrapper}>
+                  <Image
+                    source={{ uri }}
+                    style={styles.fullImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              ))}
+            </ScrollView>
+            <Pressable
+              style={styles.closeButton}
+              onPress={() => setImageModalVisible(false)}
+            >
+              <Text style={styles.closeText}>✕</Text>
+            </Pressable>
           </View>
-        ))}
-      </ScrollView>
-      <Pressable
-        style={styles.closeButton}
-        onPress={() => setImageModalVisible(false)}
-      >
-        <Text style={styles.closeText}>✕</Text>
-      </Pressable>
-    </View>
-  </Modal>
-)}
-
+        </Modal>
+      )}
     </View>
   );
 }
@@ -536,161 +627,161 @@ const styles = StyleSheet.create({
   },
   postsSection: { marginTop: 5 },
   postCard: {
-  backgroundColor: Colors.white,
-  marginTop: 5,
-  padding: 10,
-  borderRadius: 10,
-  width: "95%",
-  alignSelf: "center",
-},
-postHeader: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginBottom: 10,
-},
-profileImage: {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  backgroundColor: "#ddd",
-},
-userName: {
-  fontWeight: "600",
-  fontSize: 14,
-},
-postTime: {
-  fontSize: 12,
-  color: "#888",
-},
-postContent: {
-  marginVertical: 5,
-  fontSize: 14,
-},
-imageGrid: {
-  flexDirection: "row",
-  flexWrap: "wrap",
-  gap: 5,
-  marginTop: 10,
-},
-imageWrapper: {
-  width: "32%",
-  aspectRatio: 1,
-  borderRadius: 8,
-  overflow: "hidden",
-  position: "relative",
-},
-gridImage: {
-  width: "100%",
-  height: "100%",
-},
-modalBackground: {
-  flex: 1,
-  backgroundColor: "rgba(0,0,0,0.9)",
-  justifyContent: "center",
-  alignItems: "center",
-},
-fullImage: {
-  width: "90%",
-  height: "70%",
-  borderRadius: 12,
-},
-fullImageWrapper: {
-  width: Dimensions.get("window").width,
-  height: Dimensions.get("window").height,
-  justifyContent: "center",
-  alignItems: "center",
-},
-closeButton: {
-  position: "absolute",
-  top: 40,
-  right: 20,
-  backgroundColor: "rgba(0,0,0,0.6)",
-  borderRadius: 20,
-  padding: 10,
-},
-closeText: {
-  color: "white",
-  fontSize: 20,
-  fontWeight: "bold",
-},
+    backgroundColor: Colors.white,
+    marginTop: 5,
+    padding: 10,
+    borderRadius: 10,
+    width: "95%",
+    alignSelf: "center",
+  },
+  postHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  profileImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#ddd",
+  },
+  userName: {
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  postTime: {
+    fontSize: 12,
+    color: "#888",
+  },
+  postContent: {
+    marginVertical: 5,
+    fontSize: 14,
+  },
+  imageGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 5,
+    marginTop: 10,
+  },
+  imageWrapper: {
+    width: "32%",
+    aspectRatio: 1,
+    borderRadius: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  gridImage: {
+    width: "100%",
+    height: "100%",
+  },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fullImage: {
+    width: "90%",
+    height: "70%",
+    borderRadius: 12,
+  },
+  fullImageWrapper: {
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 40,
+    right: 20,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 20,
+    padding: 10,
+  },
+  closeText: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "bold",
+  },
 
-overlay: {
-  ...StyleSheet.absoluteFillObject,
-  backgroundColor: "rgba(0,0,0,0.5)",
-  justifyContent: "center",
-  alignItems: "center",
-},
-overlayText: {
-  color: "white",
-  fontSize: 18,
-  fontWeight: "600",
-},
-actionsRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 20,
-  marginTop: 5,
-},
-actionBtn: {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 5,
-},
-countText: {
-  fontSize: 13,
-  color: "#555",
-},
-commentSection: {
-  marginTop: 10,
-  paddingLeft: 5,
-},
-commentRow: {
-  flexDirection: "row",
-  alignItems: "flex-start",
-  marginBottom: 6,
-},
-commentProfile: {
-  width: 28,
-  height: 28,
-  borderRadius: 14,
-  backgroundColor: "#C3C0C0",
-  marginRight: 8,
-},
-commentBubble: {
-  backgroundColor: "#F1F1F1",
-  borderRadius: 10,
-  padding: 6,
-  maxWidth: "85%",
-},
-commentUser: {
-  fontWeight: "600",
-  fontSize: 12,
-  marginBottom: 2,
-},
-commentText: {
-  fontSize: 13,
-  color: "#333",
-},
-addCommentRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginTop: 5,
-  gap: 5,
-},
-commentInput: {
-  flex: 1,
-  borderWidth: 0.5,
-  borderColor: "#ccc",
-  borderRadius: 15,
-  paddingHorizontal: 10,
-  fontSize: 12,
-  height: 40,
-},
-postCommentBtn: {
-  color: Colors.primary,
-  fontWeight: "600",
-  marginLeft: 5,
-},
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  overlayText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 20,
+    marginTop: 5,
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  countText: {
+    fontSize: 13,
+    color: "#555",
+  },
+  commentSection: {
+    marginTop: 10,
+    paddingLeft: 5,
+  },
+  commentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 6,
+  },
+  commentProfile: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#C3C0C0",
+    marginRight: 8,
+  },
+  commentBubble: {
+    backgroundColor: "#F1F1F1",
+    borderRadius: 10,
+    padding: 6,
+    maxWidth: "85%",
+  },
+  commentUser: {
+    fontWeight: "600",
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  commentText: {
+    fontSize: 13,
+    color: "#333",
+  },
+  addCommentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 5,
+    gap: 5,
+  },
+  commentInput: {
+    flex: 1,
+    borderWidth: 0.5,
+    borderColor: "#ccc",
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    fontSize: 12,
+    height: 40,
+  },
+  postCommentBtn: {
+    color: Colors.primary,
+    fontWeight: "600",
+    marginLeft: 5,
+  },
 
   //  Modals
   modalOverlay: {

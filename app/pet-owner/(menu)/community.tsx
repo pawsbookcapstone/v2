@@ -7,6 +7,8 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { Pressable, RefreshControl } from "react-native";
 
+import { useAppContext } from "@/AppsProvider";
+import { all, get } from "@/helpers/db";
 import { TGroup } from "@/shared/Types/GroupType";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -20,6 +22,7 @@ import {
 } from "react-native";
 
 const Community = () => {
+  const { userId, userName, userImagePath } = useAppContext();
   const params = useLocalSearchParams();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -29,70 +32,130 @@ const Community = () => {
   const [search, setSearch] = useState("");
 
   // Dummy suggestion data
-  const suggestionData: TGroup[] = [
-    {
-      id: "1",
-      title: "Healthy Pet Food Ideas",
-      members: 124,
-      profile: "https://randomuser.me/api/portraits/women/32.jpg",
-      privacy: "Private",
-    },
-    {
-      id: "2",
-      title: "Local Dog Walkers",
-      members: 87,
-      profile: "https://randomuser.me/api/portraits/men/46.jpg",
-      privacy: "Private",
-    },
-    {
-      id: "3",
-      title: "Pet Training Tips",
-      members: 210,
-      profile: "https://randomuser.me/api/portraits/women/68.jpg",
-      privacy: "public",
-    },
-  ];
-
+  // const suggestionData: TGroup[] = [
+  //   // {
+  //   //   id: "1",
+  //   //   title: "Healthy Pet Food Ideas",
+  //   //   members: 124,
+  //   //   profile: "https://randomuser.me/api/portraits/women/32.jpg",
+  //   //   privacy: "Private",
+  //   // },
+  //   // {
+  //   //   id: "2",
+  //   //   title: "Local Dog Walkers",
+  //   //   members: 87,
+  //   //   profile: "https://randomuser.me/api/portraits/men/46.jpg",
+  //   //   privacy: "Private",
+  //   // },
+  //   // {
+  //   //   id: "3",
+  //   //   title: "Pet Training Tips",
+  //   //   members: 210,
+  //   //   profile: "https://randomuser.me/api/portraits/women/68.jpg",
+  //   //   privacy: "public",
+  //   // },
+  // ];
+  const [suggestionData, setSuggestionData] = useState<TGroup[]>([]);
   // Dummy Joined Groups
   const [joinedGroupData, setJoinedGroupData] = useState<TGroup[]>([
-    {
-      id: "10",
-      title: "Pet Grooming Hub",
-      members: 120,
-      profile: "https://cdn-icons-png.flaticon.com/512/616/616408.png",
-      privacy: "public",
-    },
-    {
-      id: "11",
-      title: "Animal Rescue Volunteers",
-      members: 80,
-      profile: "https://cdn-icons-png.flaticon.com/512/616/616408.png",
-      privacy: "private",
-    },
+    // {
+    //   id: "10",
+    //   title: "Pet Grooming Hub",
+    //   members: 120,
+    //   profile: "https://cdn-icons-png.flaticon.com/512/616/616408.png",
+    //   privacy: "public",
+    // },
+    // {
+    //   id: "11",
+    //   title: "Animal Rescue Volunteers",
+    //   members: 80,
+    //   profile: "https://cdn-icons-png.flaticon.com/512/616/616408.png",
+    //   privacy: "private",
+    // },
   ]);
 
   // Dummy My Groups
   const [myGroupData, setMyGroupData] = useState<TGroup[]>([
-    {
-      id: "1",
-      title: "Cat Lovers PH",
-      members: 56,
-      profile: "https://cdn-icons-png.flaticon.com/512/616/616408.png",
-      privacy: "public",
-    },
-    {
-      id: "2",
-      title: "Vet Finder",
-      members: 32,
-      profile: "https://cdn-icons-png.flaticon.com/512/616/616408.png",
-      privacy: "public",
-    },
+    // {
+    //   id: "1",
+    //   title: "Cat Lovers PH",
+    //   members: 56,
+    //   profile: "https://cdn-icons-png.flaticon.com/512/616/616408.png",
+    //   privacy: "public",
+    // },
+    // {
+    //   id: "2",
+    //   title: "Vet Finder",
+    //   members: 32,
+    //   profile: "https://cdn-icons-png.flaticon.com/512/616/616408.png",
+    //   privacy: "public",
+    // },
   ]);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 1200);
+    fetchGroups();
     return () => clearTimeout(timer);
   }, []);
+
+  const fetchGroups = async () => {
+    try {
+      setLoading(true);
+
+      const query = await all("groups");
+
+      const items = query.docs.map((doc) => {
+        const data = doc.data();
+
+        let image: string | null = null;
+
+        if (typeof data.profile === "string" && data.profile.trim() !== "") {
+          image = data.profile;
+        } else if (data.images && typeof data.images === "object") {
+          const values = Object.values(data.images).filter(
+            (url) => typeof url === "string",
+          );
+          if (values.length > 0) {
+            image = values[0];
+          }
+        }
+
+        return {
+          id: doc.id,
+          title: data.title,
+          members: data.members,
+          profile: image,
+          privacy: data.privacy,
+          questions: data.questions || [],
+          description: data.description,
+          createdAt: data.createdAt,
+          groupOwnerId: data.groupOwnerId,
+        };
+      });
+
+      const queryJoined = await get("users", userId, "joined-groups").where();
+      const joinedGroupIds = queryJoined.docs.map((doc) => doc.id);
+      const myJoined = items.filter((group) =>
+        joinedGroupIds.includes(group.id),
+      );
+
+      const myGroups = items.filter((group) => group.groupOwnerId === userId);
+      const suggestions = items.filter(
+        (group) =>
+          group.groupOwnerId !== userId && !joinedGroupIds.includes(group.id),
+      );
+
+      setSuggestionData(suggestions);
+      setMyGroupData(myGroups);
+      setJoinedGroupData(myJoined);
+
+      // console.log("Fetched groups:", queryMyGroup);
+    } catch (error) {
+      console.log("Error fetching groups:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRefresh = async () => {
     setLoading(true);
@@ -131,7 +194,7 @@ const Community = () => {
 
     const lowerSearch = search.toLowerCase();
     return data.filter((item) =>
-      item.title.toLowerCase().includes(lowerSearch)
+      item.title.toLowerCase().includes(lowerSearch),
     );
   }, [activeTab, search, myGroupData, joinedGroupData]);
 
@@ -143,12 +206,14 @@ const Community = () => {
         title: item.title,
         members: item.members.toString(),
         profile: item.profile,
+        privacy: item.privacy,
+        questions: item.questions,
         type:
           activeTab === "MyGroup"
             ? "MyGroup"
             : activeTab === "JoinedGroup"
-            ? "JoinedGroup"
-            : "Suggestion",
+              ? "JoinedGroup"
+              : "Suggestion",
       },
     });
   };

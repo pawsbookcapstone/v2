@@ -1,3 +1,5 @@
+import { useAppContext } from "@/AppsProvider";
+import { add, serverTimestamp } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
@@ -16,10 +18,11 @@ import {
 } from "react-native";
 
 const CreateGroup = () => {
+  const { userId, userName, userImagePath } = useAppContext();
   const [groupName, setGroupName] = useState("");
   const [description, setDescription] = useState("");
   const [profile, setProfile] = useState(
-    "https://cdn-icons-png.flaticon.com/512/616/616408.png"
+    "https://cdn-icons-png.flaticon.com/512/616/616408.png",
   );
   const [privacy, setPrivacy] = useState<"Public" | "Private">("Public");
   const [questions, setQuestions] = useState([""]);
@@ -35,23 +38,35 @@ const CreateGroup = () => {
     setQuestions(updated);
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!groupName.trim()) return;
 
-    const newGroup = {
-      id: Date.now().toString(),
-      title: groupName,
-      description,
-      profile,
-      members: 1,
-      privacy,
-      questions: privacy === "Private" ? questions.filter((q) => q.trim()) : [],
-    };
+    try {
+      const newGroup = {
+        id: Date.now().toString(),
+        title: groupName,
+        description,
+        profile,
+        groupOwnerId: userId,
+        members: 1,
+        privacy,
+        questions:
+          privacy === "Private" ? questions.filter((q) => q.trim()) : [],
+        createdAt: serverTimestamp(),
+      };
 
-    router.push({
-      pathname: "/pet-owner/(menu)/community",
-      params: { newGroup: JSON.stringify(newGroup) },
-    });
+      await add("groups").value(newGroup);
+
+      alert("Group published!");
+
+      router.push({
+        pathname: "/pet-owner/(menu)/community",
+        params: { newGroup: JSON.stringify(newGroup) },
+      });
+    } catch (error) {
+      console.error("Error publishing item:", error);
+      alert("Failed to publish item. Try again.");
+    }
   };
 
   return (
