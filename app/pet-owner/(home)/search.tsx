@@ -65,6 +65,27 @@ const Search = () => {
 
   useEffect(() => {
     const fetchUsers = async () => {
+      try {
+        const snap = await get("users", userId, "recent_searches").where(
+          orderBy("date", "desc"),
+          limit(10),
+        );
+
+        setRecentSearches(
+          snap.docs.map((doc) => {
+            const d = doc.data();
+            return {
+              id: doc.id,
+              name: d.name,
+              img_path: d.img_path ?? "",
+            };
+          }),
+        );
+      } catch (e) {
+        console.log("Failed to fetch recent searches:", e);
+      }
+
+
       const snap = await all("users");
       const friendsSnap = await get("friends").where(
         where("users", "array-contains", userId),
@@ -100,6 +121,7 @@ const Search = () => {
 
   const handleDelete = (id: string) => {
     setRecentSearches((prev) => prev.filter((item) => item.id !== id));
+    remove("users", userId, "recent_searches", id)
     setShowDropdown(false);
   };
 
@@ -116,35 +138,6 @@ const Search = () => {
       });
     }
   };
-
-  //fetch searches
-  useEffect(() => {
-    if (!userId) return;
-
-    const fetchRecentSearches = async () => {
-      try {
-        const snap = await get("users", userId, "recent_searches").where(
-          orderBy("date", "desc"),
-          limit(10),
-        );
-
-        setRecentSearches(
-          snap.docs.map((doc) => {
-            const d = doc.data();
-            return {
-              id: doc.id,
-              name: d.name,
-              img_path: d.img_path ?? "",
-            };
-          }),
-        );
-      } catch (e) {
-        console.log("Failed to fetch recent searches:", e);
-      }
-    };
-
-    fetchRecentSearches();
-  }, [userId]);
 
   // const handleSeeProfile = (item: any) => {
   //   router.push({
@@ -191,12 +184,7 @@ const Search = () => {
       <TouchableOpacity
         style={{ flex: 1 }}
         activeOpacity={0.7}
-        onPress={() =>
-          router.push({
-            pathname: "/usable/user-profile",
-            params: { userToViewId: item.id },
-          })
-        }
+        onPress={() => handleSeeProfile(item)}
       >
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <Image source={{ uri: item.img_path }} style={styles.avatar} />
@@ -204,7 +192,7 @@ const Search = () => {
         </View>
       </TouchableOpacity>
 
-      {item.status === "Not Friend" && (
+      {/* {item.status === "Not Friend" && (
         <TouchableOpacity onPress={() => handleAddFriend(item)}>
           <Text>Add Friend</Text>
         </TouchableOpacity>
@@ -218,7 +206,7 @@ const Search = () => {
         <TouchableOpacity onPress={() => handleCancelFriendRequest(item)}>
           <Text>Unfriend</Text>
         </TouchableOpacity>
-      )}
+      )} */}
     </View>
   );
 
@@ -238,6 +226,14 @@ const Search = () => {
       Alert.alert("Error", e + "");
     }
   };
+
+  const handleSeeProfile = (item:any) => {
+    saveRecentSearch(item);
+    router.push({
+      pathname: "/usable/user-profile",
+      params: { userToViewId: item.id },
+    })
+  }
 
   const saveRecentSearch = async (item: any) => {
     if (!userId) return;
