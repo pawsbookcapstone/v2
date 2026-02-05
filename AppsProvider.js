@@ -25,8 +25,6 @@ export const AppsProvider = ({ children }) => {
     if (!userId) return;
 
   const subscription = AppState.addEventListener("change", async (state) => {
-    console.log('changed in app', state);
-    
     setDoc(doc(db, "users", userId), {
       last_online_at: serverTimestamp(), active_status: state == 'active' ? 'active' : 'inactive'
     }, { merge: true })
