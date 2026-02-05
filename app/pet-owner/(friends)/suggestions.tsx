@@ -1,9 +1,12 @@
+import { useAppContext } from "@/AppsProvider";
+import { add, get, serverTimestamp, where } from "@/helpers/db";
+import { useNotifHook } from "@/helpers/notifHook";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { screens } from "@/shared/styles/styles";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   FlatList,
   Image,
@@ -14,79 +17,142 @@ import {
 } from "react-native";
 
 const Suggestions = () => {
-  const [people, setPeople] = useState([
-    {
-      id: "1",
-      name: "Sophia Miller",
-      profilePic: "https://randomuser.me/api/portraits/women/65.jpg",
-      mutualFriends: 6,
-      mutualFriendImages: [
-        "https://randomuser.me/api/portraits/men/12.jpg",
-        "https://randomuser.me/api/portraits/women/33.jpg",
-        "https://randomuser.me/api/portraits/men/56.jpg",
-      ],
-    },
-    {
-      id: "2",
-      name: "James Anderson",
-      profilePic: "https://randomuser.me/api/portraits/men/41.jpg",
-      mutualFriends: 3,
-      mutualFriendImages: [
-        "https://randomuser.me/api/portraits/women/21.jpg",
-        "https://randomuser.me/api/portraits/men/40.jpg",
-      ],
-    },
-    {
-      id: "3",
-      name: "Olivia Taylor",
-      profilePic: "https://randomuser.me/api/portraits/women/72.jpg",
-      mutualFriends: 8,
-      mutualFriendImages: [
-        "https://randomuser.me/api/portraits/men/15.jpg",
-        "https://randomuser.me/api/portraits/women/29.jpg",
-        "https://randomuser.me/api/portraits/men/46.jpg",
-      ],
-    },
-    {
-      id: "4",
-      name: "Liam Martinez",
-      profilePic: "https://randomuser.me/api/portraits/men/50.jpg",
-      mutualFriends: 2,
-      mutualFriendImages: [
-        "https://randomuser.me/api/portraits/men/23.jpg",
-        "https://randomuser.me/api/portraits/women/54.jpg",
-      ],
-    },
-  ]);
+  const {userId, userName, userImagePath} = useAppContext()
 
-  const [sentRequests, setSentRequests] = useState<string[]>([]);
+  const [people, setPeople] = useState<any>([]);
 
-  const handleAddFriend = (id: string) => {
-    setSentRequests((prev) => [...prev, id]);
+  // const [sentRequests, setSentRequests] = useState<string[]>([]);
+  const addNotif = useNotifHook()
+
+  useEffect(() => {
+    const chunk = (arr: string[], size = 10) =>
+      Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+        arr.slice(i * size, i * size + size)
+      );
+
+    const fetch = async () => {
+      // 1️⃣ Get my friends
+      const snap = await get("friends").where(
+        where("users", "array-contains", userId),
+        // where("confirmed", "==", true)
+      );
+
+      const friendIds = new Set<string>();
+      const friendRequestedIds = new Set<string>();
+
+      snap.docs.forEach((d) => {
+        const [u1, u2] = d.data().users;
+        if (d.data().confirmed)
+          friendIds.add(u1 === userId ? u2 : u1);
+        else
+          friendRequestedIds.add(u1 === userId ? u2 : u1);
+      });
+
+      if (friendIds.size === 0) return;
+
+      // 2️⃣ Query friends-of-friends safely (max 10)
+      const mutuals = new Map<string, any>();
+
+      const friendIdChunks = chunk([...friendIds]);
+
+      for (const ids of friendIdChunks) {
+        const fofSnap = await get("friends").where(
+          where("users", "array-contains-any", ids),
+          where("confirmed", "==", true)
+        );
+
+        fofSnap.docs.forEach((d) => {
+          const data = d.data();
+          const [u1, u2] = data.users;
+
+          const candidate =
+            friendIds.has(u1) ? u2 :
+            friendIds.has(u2) ? u1 :
+            null;
+
+          if (!candidate) return;
+          if (candidate === userId) return; 
+          if (friendIds.has(candidate)) return; 
+          if (friendRequestedIds.has(candidate)) return;
+
+          const curr = mutuals.get(candidate) ?? {
+            id: candidate,
+            name: data.details[candidate].name,
+            img_path: data.details[candidate].img_path,
+            mutuals: 0,
+            mutual_img_paths: []
+          };
+
+          curr.mutuals += 1;
+          if (curr.mutuals < 3)
+            curr.mutual_img_paths.push(data.details[candidate == u1 ? u2 : u1].img_path)
+          mutuals.set(candidate, curr);
+        });
+        
+      }
+      setPeople([...mutuals.values()].sort(
+        (a, b) => b.mutuals - a.mutuals
+      ))
+    };
+
+    fetch();
+  }, []);
+
+
+  const handleAddFriend = async (item: any) => {
+    // setSentRequests((prev) => [...prev, id]);
+    const res = await add("friends").value({
+      users: [userId, item.id],
+      date_requested: serverTimestamp(),
+      requested_by_id: userId,
+      confirmed: false,
+      details: {
+        // Save info of the friend you are requesting
+        [item.id]: {
+          name: item.name,
+          img_path: item.img_path ?? "",
+        },
+        // Optionally, save current user info too
+        [userId]: {
+          name: userName,
+          img_path: userImagePath ?? "",
+        },
+      },
+    })
+    handleRemove(item.id)
+      
+    addNotif({
+      receiver_id: item.id,
+      href: "/pet-owner/my-friends",
+      type: "Sent Friend Request",
+      params: {
+        id: res.id,
+      }
+    });
   };
 
   const handleRemove = (id: string) => {
-    setPeople((prev) => prev.filter((p) => p.id !== id));
-    setSentRequests((prev) => prev.filter((reqId) => reqId !== id));
+    setPeople((prev:any) => prev.filter((p:any) => p.id !== id));
+    // setSentRequests((prev) => prev.filter((reqId) => reqId !== id));
   };
 
   const renderPerson = ({ item }: { item: (typeof people)[0] }) => {
-    const isSent = sentRequests.includes(item.id);
+    // const isSent = sentRequests.includes(item.id);
 
     return (
       <View style={styles.card}>
-        <Image source={{ uri: item.profilePic }} style={styles.profilePic} />
+        <Image source={{ uri: item.img_path }} style={styles.profilePic} />
 
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{item.name}</Text>
 
-          {item.mutualFriends > 0 && (
+          {item.mutuals > 0 && (
             <View style={styles.mutualRow}>
               <View style={styles.mutualPics}>
-                {item.mutualFriendImages.slice(0, 3).map((uri, idx) => (
+                {item.mutual_img_paths.map((uri:any, idx:number) => (
                   <Image
                     key={idx}
-                    source={{ uri }}
+                    source={{ uri:uri }}
                     style={[
                       styles.mutualPic,
                       { marginLeft: idx === 0 ? 0 : -10 },
@@ -95,14 +161,14 @@ const Suggestions = () => {
                 ))}
               </View>
               <Text style={styles.mutual}>
-                {item.mutualFriends} mutual friend
-                {item.mutualFriends > 1 ? "s" : ""}
+                {item.mutuals} mutual friend
+                {item.mutuals > 1 ? "s" : ""}
               </Text>
             </View>
           )}
 
           <View style={styles.actions}>
-            {isSent ? (
+            {/* {isSent ? (
               <View
                 style={[
                   styles.button,
@@ -117,16 +183,16 @@ const Suggestions = () => {
                   Cancel Request
                 </Text>
               </View>
-            ) : (
+            ) : ( */}
               <Pressable
                 style={[styles.button, { backgroundColor: Colors.primary }]}
-                onPress={() => handleAddFriend(item.id)}
+                onPress={() => handleAddFriend(item)}
               >
                 <Text style={[styles.btnText, { color: "#fff" }]}>
                   Add Friend
                 </Text>
               </Pressable>
-            )}
+            {/* )} */}
 
             <Pressable
               style={[styles.button, { backgroundColor: "#E4E6EB" }]}
