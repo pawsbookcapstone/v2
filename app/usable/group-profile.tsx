@@ -1,5 +1,5 @@
 import { useAppContext } from "@/AppsProvider";
-import { remove, serverTimestamp, set, update } from "@/helpers/db";
+import { all, remove, serverTimestamp, set, update } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
@@ -11,7 +11,7 @@ import {
   MaterialIcons,
 } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -40,7 +40,7 @@ interface Post {
   profileImage: string;
   time: string;
   content: string;
-  image: string | null;
+  images: string[] | null;
   likes: number;
   liked: boolean;
   comments: Comment[];
@@ -74,27 +74,58 @@ export default function GroupProfile() {
   //   console.log("ID", id);
   // }, []);
   const [posts, setPosts] = useState<Post[]>([
-    {
-      id: "1",
-      user: "John Doe",
-      profileImage: "https://randomuser.me/api/portraits/men/45.jpg",
-      time: "2h ago",
-      content: "Enjoying the sunny day with my dog 🐶",
-      image: "https://images.unsplash.com/photo-1507149833265-60c372daea22",
-      likes: 4,
-      liked: false,
-      comments: [
-        {
-          id: "c1",
-          user: "Jane Smith",
-          text: "So cute!",
-          profileImage: "https://randomuser.me/api/portraits/women/22.jpg",
-        },
-      ],
-      showComments: false,
-      newComment: "",
-    },
+    // {
+    //   id: "1",
+    //   user: "John Doe",
+    //   profileImage: "https://randomuser.me/api/portraits/men/45.jpg",
+    //   time: "2h ago",
+    //   content: "Enjoying the sunny day with my dog 🐶",
+    //   images: "https://images.unsplash.com/photo-1507149833265-60c372daea22",
+    //   likes: 4,
+    //   liked: false,
+    //   comments: [
+    //     {
+    //       id: "c1",
+    //       user: "Jane Smith",
+    //       text: "So cute!",
+    //       profileImage: "https://randomuser.me/api/portraits/women/22.jpg",
+    //     },
+    //   ],
+    //   showComments: false,
+    //   newComment: "",
+    // },
   ]);
+
+  useEffect(() => {
+    const fetchPosts = async () => {
+      try {
+        const postsData = await all("groups", groupId, "posts");
+        const items = postsData.docs.map((doc) => {
+          const data = doc.data();
+
+          return {
+            id: doc.id,
+            user: data.user,
+            profileImage: data.profileImage,
+            time: data.createdAt?.toDate().toLocaleString() ?? "",
+            content: data.content,
+            images: data.images || null,
+            likes: data.likes || 0,
+            liked: data.liked || false,
+            comments: data.comments || [],
+            showComments: false,
+            newComment: data.newComment || "",
+          };
+        });
+
+        setPosts(items);
+        // console.log("Fetched posts:", items);
+      } catch (error) {
+        console.error("Error fetching posts:", error);
+      }
+    };
+    fetchPosts();
+  }, []);
 
   // ❤️ Like toggle
   const toggleLike = (postId: string) => {
@@ -123,7 +154,7 @@ export default function GroupProfile() {
   };
 
   // 📝 Add new comment
-  const handleAddComment = (postId: string) => {
+  const handleAddComment = async (postId: string) => {
     setPosts((prev) =>
       prev.map((post) => {
         if (post.id === postId && post.newComment.trim()) {
@@ -131,7 +162,7 @@ export default function GroupProfile() {
             id: Date.now().toString(),
             user: "You",
             text: post.newComment,
-            profileImage: myProfileImage,
+            profileImage: userImagePath,
           };
           return {
             ...post,
@@ -353,7 +384,8 @@ export default function GroupProfile() {
         {/*  Posts Section */}
         <View style={styles.postsSection}>
           {posts.map((post) => {
-            const postImages = post.image ? [post.image] : [];
+            const postImages = post.images ?? [];
+
             const maxImagesToShow = 3;
             const extraImages = postImages.length - maxImagesToShow;
 

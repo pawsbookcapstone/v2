@@ -1,5 +1,5 @@
 import { useAppContext } from "@/AppsProvider";
-import { serverTimestamp, set } from "@/helpers/db";
+import { add, serverTimestamp } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
@@ -65,14 +65,14 @@ const AnonymousPosting = () => {
     }
 
     try {
-      await set("groups", groupId, "posts", userId).value({
+      await add("groups", groupId, "posts").value({
         // id: Date.now().toString(),
-        user: myProfileName,
-        profileImage: myProfileImage,
+        user: userName,
+        profileImage: userImagePath,
         time: serverTimestamp(),
         content,
         images,
-
+        userId,
         liked: false,
         likesCount: 0,
         comments: [],
@@ -92,10 +92,10 @@ const AnonymousPosting = () => {
       //   comments: [],
       //   showComments: false,
       // };
-
-      router.replace({
-        pathname: "/usable/group-profile",
-      });
+      router.back();
+      // router.replace({
+      //   pathname: "/usable/group-profile",
+      // });
       // ToastAndroid.show("Joined group successfully!", ToastAndroid.SHORT);
       // router.push({
       //   pathname: "/pet-owner/(menu)/community",
