@@ -1,5 +1,5 @@
 import { useAppContext } from "@/AppsProvider";
-import { set } from "@/helpers/db";
+import { serverTimestamp, set } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
@@ -17,7 +17,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 const myProfileImage = "https://randomuser.me/api/portraits/men/32.jpg";
@@ -66,10 +66,10 @@ const AnonymousPosting = () => {
 
     try {
       await set("groups", groupId, "posts", userId).value({
-        id: Date.now().toString(),
+        // id: Date.now().toString(),
         user: myProfileName,
         profileImage: myProfileImage,
-        time: "Just now",
+        time: serverTimestamp(),
         content,
         images,
 
