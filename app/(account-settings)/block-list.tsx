@@ -1,10 +1,12 @@
+import { useAppContext } from "@/AppsProvider";
+import { all, get, remove, where } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { screens } from "@/shared/styles/styles";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
@@ -16,27 +18,49 @@ import {
 } from "react-native";
 
 const BlockList = () => {
-  const [blockedUsers, setBlockedUsers] = useState([
-    {
-      id: "1",
-      name: "Jane Doe",
-      avatar: "https://randomuser.me/api/portraits/women/44.jpg",
-    },
-    {
-      id: "2",
-      name: "John Smith",
-      avatar: "https://randomuser.me/api/portraits/men/32.jpg",
-    },
-    {
-      id: "3",
-      name: "Emily Johnson",
-      avatar: "https://randomuser.me/api/portraits/women/68.jpg",
-    },
+  const {userId} = useAppContext()
+  
+  const [blockedUsers, setBlockedUsers] = useState<any>([
+    // {
+    //   id: "1",
+    //   name: "Jane Doe",
+    //   avatar: "https://randomuser.me/api/portraits/women/44.jpg",
+    // },
+    // {
+    //   id: "2",
+    //   name: "John Smith",
+    //   avatar: "https://randomuser.me/api/portraits/men/32.jpg",
+    // },
+    // {
+    //   id: "3",
+    //   name: "Emily Johnson",
+    //   avatar: "https://randomuser.me/api/portraits/women/68.jpg",
+    // },
   ]);
 
   const [message, setMessage] = useState("");
   const slideAnim = useRef(new Animated.Value(-60)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const fetch = async () => {
+      const snap = await all("users", userId, "blocked_users")
+      if (snap.empty) return
+      
+      const userIds = snap.docs.map(d => d.id)
+      const userSnap = await get("users").where(where("id", "in", userIds))
+      setBlockedUsers(userSnap.docs.map(d => {
+        const v = d.data()
+        return{
+          id: d.id,
+          name:`${v.firstname} ${v.lastname}`,
+          avatar: v.img_path ?? ''
+        }
+      }))
+    }
+
+    fetch()
+  }, [])
 
   const showMessage = (msg: string) => {
     setMessage(msg);
@@ -70,10 +94,10 @@ const BlockList = () => {
     }, 2500);
   };
 
-  const handleUnblock = (id: string) => {
-    const user = blockedUsers.find((u) => u.id === id);
+  const handleUnblock = (user: any) => {
     if (user) showMessage(`${user.name} has been unblocked.`);
-    setBlockedUsers(blockedUsers.filter((user) => user.id !== id));
+    setBlockedUsers(blockedUsers.filter((_user:any) => _user.id !== user.id));
+    remove("users", userId, "blocked_users", user.id)
   };
 
   const renderItem = ({ item }: any) => (
@@ -93,7 +117,7 @@ const BlockList = () => {
       </View>
 
       <TouchableOpacity
-        onPress={() => handleUnblock(item.id)}
+        onPress={() => handleUnblock(item)}
         activeOpacity={0.8}
         style={styles.unblockButton}
       >

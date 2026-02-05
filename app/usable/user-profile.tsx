@@ -1,5 +1,7 @@
 import { useAppContext } from "@/AppsProvider";
-import { add, all, count, find, get, set, where } from "@/helpers/db";
+import { add, all, count, find, get, remove, set, where } from "@/helpers/db";
+import { generateChatId } from "@/helpers/helper";
+import { useNotifHook } from "@/helpers/notifHook";
 import { computeTimePassed } from "@/helpers/timeConverter";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
@@ -9,6 +11,7 @@ import { screens, ShadowStyle } from "@/shared/styles/styles";
 import {
   Entypo,
   FontAwesome,
+  FontAwesome5,
   Ionicons,
   MaterialIcons,
 } from "@expo/vector-icons";
@@ -49,10 +52,30 @@ const Profile = () => {
   const [friendsCount, setFriendsCount] = useState<number>(0);
   const [posts, setPosts] = useState<any>([]);
   const [comment, setComment] = useState("");
+  const [friendStatus, setFriendStatus] = useState("Unfriend");
+  const [blocked, setBlocked] = useState(false);
+
+  const addNotif = useNotifHook()
 
   useEffect(() => {
     const fetch = async () => {
       setLoading(true);
+
+      const usnap = await find("friends", generateChatId(userId, userToViewId))
+      if (usnap.exists()){
+        const d = usnap.data()
+        if (d.confirmed)
+          setFriendStatus("Friend")
+        else{
+          if (d.users[0] === userId)
+            setFriendStatus("Your Request")
+          else
+            setFriendStatus("Other Request")
+        }
+      }
+      const bsnap = await find("users", userId, "blocked_users", userToViewId)
+      setBlocked(bsnap.exists())
+
       const snap = await find("users", userToViewId);
       const data: any = snap.data();
       setProfile(data);
@@ -95,6 +118,12 @@ const Profile = () => {
         const dc = postsSnap.docs[i];
         const d = dc.data();
 
+        let shared = null
+        if (d.shared_post_id){
+          const shareSnap = await find('posts', d.shared_post_id)
+          shared = shareSnap.data()
+        }
+
         const commentSnap = await all("posts", dc.id, "comments");
         _posts.push({
           id: dc.id,
@@ -103,6 +132,7 @@ const Profile = () => {
             ? d.liked_by_ids.includes(userId)
             : false,
           showComments: false,
+          shared:shared,
           comments: commentSnap.docs.map((_comment: any) => ({
             id: _comment.id,
             ..._comment.data(),
@@ -161,6 +191,52 @@ const Profile = () => {
     );
   };
 
+  const unBlock = () => {
+    remove("users", userId, "blocked_users", userToViewId)
+    setBlocked(false)
+  }
+
+  const block = () => {
+    set("users", userId, "blocked_users", userToViewId).value({})
+    setBlocked(true)
+  }
+
+  const addFriend = () => {
+    const generatedId = generateChatId(userId, userToViewId)
+    set("friends", generatedId).value({
+      users: [userId, userToViewId],
+      date_requested: serverTimestamp(),
+      requested_by_id: userId,
+      confirmed: false,
+      details: {
+        // Save info of the friend you are requesting
+        [userToViewId]: {
+          name: `${profile.firstname} ${profile.lastname}`,
+          img_path: profile.img_path ?? "",
+        },
+        // Optionally, save current user info too
+        [userId]: {
+          name: userName,
+          img_path: userImagePath ?? "",
+        },
+      },
+    })
+    setFriendStatus("Your Request")
+    addNotif({
+      receiver_id: userToViewId,
+      href: "/pet-owner/my-friends",
+      type: "Sent Friend Request",
+      params: {
+        id: generatedId,
+      }
+    });
+  }
+
+  const unfriendOrCancelRequest = () => {
+    remove("friends", generateChatId(userId, userToViewId))
+    setFriendStatus("Unfriend")
+  }
+
   const handleAddComment = (postId: string) => {
     // const text = commentInputs[postId]?.trim();
     // if (!text) return;
@@ -189,6 +265,115 @@ const Profile = () => {
 
     // setCommentInputs((prev) => ({ ...prev, [postId]: "" }));
   };
+    
+  const handleSeeProfile = (post: any) => {
+    if (post.creator_id === userId) {
+      router.push("/pet-owner/profile");
+      return;
+    }
+
+    router.push({
+      pathname: "/usable/user-profile",
+      params: { userToViewId: post.creator_id },
+    });
+  };
+
+
+    const renderShared = (item: any) => {
+      const maxImagesToShow = 3;
+      const extraImages = (item.img_paths ?? []).length - maxImagesToShow;
+  
+      return (
+        <View style={styles.sharedPostCard}>
+          <View style={styles.sharedPostHeader}>
+            <Pressable
+              style={{ flexDirection: "row", alignItems: "center" }}
+              onPress={() => handleSeeProfile(item)}
+            >
+              {item.creator_img_path ? (
+                <Image
+                  source={{ uri: item.creator_img_path }}
+                  style={styles.sharedProfileImage}
+                />
+              ) : (
+                <View style={styles.sharedProfileImage} />
+              )}
+  
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginLeft: 8,
+                  flex: 1,
+                  gap: 10,
+                }}
+              >
+                <View>
+                  <Text style={styles.sharedUserName}>{item.creator_name}</Text>
+                  <Text style={styles.sharedPostTime}>{item.date_ago}</Text>
+                </View>
+              </View>
+            </Pressable>
+            </View>
+  
+          {/* Content */}
+          <Text style={styles.sharedPostContent}>{item.body}</Text>
+  
+          {/* Tagged Pets */}
+          {item.pets && item.pets.length > 0 && (
+            <View style={styles.taggedPetsContainer}>
+              {item.pets.map((pet: any) => (
+                <TouchableOpacity
+                  key={pet.id}
+                  style={styles.petChip}
+                  onPress={() => console.log("Go to pet profile:", pet.name)}
+                >
+                  {pet.img_path ? (
+                    <Image
+                      source={{ uri: pet.img_path }}
+                      style={styles.petAvatar}
+                    />
+                  ) : (
+                    <View style={styles.petAvatar} />
+                  )}
+                  <Text style={styles.petName}>{pet.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+  
+          {/* Images Grid */}
+          {item.img_paths && item.img_paths.length > 0 && (
+            <View style={styles.imageGrid}>
+              {item.img_paths
+                .slice(0, maxImagesToShow)
+                .map((img: any, idx: number) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.imageWrapper}
+                    onPress={() => {
+                      // setSelectedPostImages(item.img_paths ?? []);
+                      // setSelectedIndex(idx);
+                      // setImageModalVisible(true);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Image
+                      source={{ uri: img }}
+                      style={styles.gridImage}
+                      resizeMode="cover"
+                    />
+                    {idx === maxImagesToShow - 1 && extraImages > 0 && (
+                      <View style={styles.overlay}>
+                        <Text style={styles.overlayText}>+{extraImages}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+            </View>
+          )}
+        </View>)
+        }
 
   return (
     <View style={[screens.screen, { backgroundColor: Colors.background }]}>
@@ -273,29 +458,28 @@ const Profile = () => {
 
             {/* Buttons */}
             <View style={styles.actionWrapper}>
-              {/* <Pressable
+              <Pressable
                 style={[
                   styles.actionButton,
-                  { backgroundColor: friendStatus ? "#ccc" : Colors.primary },
+                  { backgroundColor: friendStatus === "Your Request" ? Colors.red : (friendStatus == 'Friend' ? "#ccc" : Colors.primary) },
                 ]}
                 onPress={() => {
-                  if (friendStatus) {
-                    console.log("Unfriended user");
-                    setFriendStatus(false);
+                  if (friendStatus === "Friend" || friendStatus === "Your Request") {
+                    unfriendOrCancelRequest()
                   } else {
-                    console.log("Added friend");
-                    setFriendStatus(true);
+                    addFriend()
                   }
                 }}
               >
-                {friendStatus ? (
+                {(friendStatus === "Friend") && (
                   <>
                     <FontAwesome5 name="user-times" size={17} color="black" />
                     <Text style={[styles.actionButtonText, { color: "black" }]}>
                       Unfriend
                     </Text>
                   </>
-                ) : (
+                )}
+                {friendStatus === "Unfriend" && (
                   <>
                     <FontAwesome5 name="user-plus" size={17} color="black" />
                     <Text style={[styles.actionButtonText, { color: "black" }]}>
@@ -303,7 +487,15 @@ const Profile = () => {
                     </Text>
                   </>
                 )}
-              </Pressable> */}
+                {friendStatus === "Your Request" && (
+                  <>
+                    <FontAwesome5 name="user-plus" size={17} color="black" />
+                    <Text style={[styles.actionButtonText, { color: "black" }]}>
+                      Cancel Request
+                    </Text>
+                  </>
+                )}
+              </Pressable>
 
               <Pressable
                 style={[
@@ -314,6 +506,33 @@ const Profile = () => {
               >
                 <Ionicons name="chatbubble-sharp" size={17} color="white" />
                 <Text style={styles.actionButtonText}>Message</Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.actionButton,
+                  { backgroundColor: blocked ? Colors.primary : Colors.red },
+                ]}
+                onPress={() => {
+                  if (blocked) unBlock()
+                  else block()
+                }}
+              >
+                {blocked ? (
+                  <>
+                    <FontAwesome5 name="user-times" size={17} color="black" />
+                    <Text style={[styles.actionButtonText, { color: "black" }]}>
+                      Unblock
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <FontAwesome5 name="user-plus" size={17} color="black" />
+                    <Text style={[styles.actionButtonText, { color: "black" }]}>
+                      Block
+                    </Text>
+                  </>
+                )}
               </Pressable>
             </View>
           </View>
@@ -483,6 +702,8 @@ const Profile = () => {
                         ))}
                     </View>
                   )}
+                  
+                {post.shared && renderShared(post.shared)}
 
                   {/* Footer */}
                   <View style={styles.postFooter}>
@@ -600,6 +821,67 @@ const Profile = () => {
 export default Profile;
 
 const styles = StyleSheet.create({
+  sharedProfileImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#C3C0C0",
+  },
+  sharedPostHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  sharedPostCard: {
+    borderWidth: 1,
+    borderBottomWidth:0,
+    borderColor: Colors.lightGray,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    borderBottomRightRadius:0,
+    borderBottomLeftRadius:0,
+    width: "95%",
+    alignSelf: "center",
+  },
+  sharedUserName: {
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  sharedPostContent: {
+    marginVertical: 5,
+    fontSize: 14,
+  },
+  sharedPostTime: {
+    fontSize: 12,
+    color: "#888",
+  },
+  taggedPetsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 5,
+    marginBottom: 10,
+  },
+  petChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F1F1",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  petAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 6,
+    backgroundColor: "#ccc",
+  },
+  petName: {
+    fontSize: 12,
+    color: "#333",
+  },
   scrollContainer: {
     flex: 1,
     paddingBottom: 100,
@@ -660,7 +942,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 10,
 
-    paddingHorizontal: 50,
+    paddingHorizontal: 20,
     alignSelf: "center",
   },
   more: {

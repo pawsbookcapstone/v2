@@ -144,7 +144,7 @@ const Profile = () => {
 
         let shared = null
         if (d.shared_post_id){
-          const shareSnap = (await find('posts', d.shared_post_id))
+          const shareSnap = await find('posts', d.shared_post_id)
           shared = shareSnap.data()
         }
 
