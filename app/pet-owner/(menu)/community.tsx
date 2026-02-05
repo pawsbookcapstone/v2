@@ -8,7 +8,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Pressable, RefreshControl } from "react-native";
 
 import { useAppContext } from "@/AppsProvider";
-import { all, get } from "@/helpers/db";
+import { all } from "@/helpers/db";
 import { TGroup } from "@/shared/Types/GroupType";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -133,7 +133,7 @@ const Community = () => {
         };
       });
 
-      const queryJoined = await get("users", userId, "joined-groups").where();
+      const queryJoined = await all("users", userId, "joined-groups");
       const joinedGroupIds = queryJoined.docs.map((doc) => doc.id);
       const myJoined = items.filter((group) =>
         joinedGroupIds.includes(group.id),
