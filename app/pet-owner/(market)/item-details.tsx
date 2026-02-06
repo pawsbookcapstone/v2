@@ -1,12 +1,13 @@
 import { useAppContext } from "@/AppsProvider";
 import MapComponent from "@/components/MapComponent";
+import { remove } from "@/helpers/db";
 import { saveItemForUser } from "@/helpers/savedItems";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { FontAwesome, Ionicons, Octicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -36,6 +37,8 @@ const ItemDetails = () => {
 
   const [activeIndex, setActiveIndex] = useState(0);
 
+  const itemID = String(id);
+
   // Handle multiple or single images
   const images = (() => {
     try {
@@ -47,7 +50,9 @@ const ItemDetails = () => {
   })();
 
   const { userId } = useAppContext(); // current logged-in user
-
+  useEffect(() => {
+    console.log(itemID);
+  }, []);
   const handleSaveItem = async () => {
     if (!userId) {
       alert("You must be logged in to save items.");
@@ -82,6 +87,23 @@ const ItemDetails = () => {
         otherUserImgPath: sellerImage,
       },
     });
+  };
+
+  const handleDelete = async () => {
+    try {
+      if (!itemID) {
+        alert("Cannot delete: invalid item ID.");
+        return;
+      }
+
+      await remove("marketPlace", itemID);
+
+      alert("Item deleted successfully.");
+      router.push("/pet-owner/(tabs)/market-place");
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      alert("Failed to delete item.");
+    }
   };
 
   return (
@@ -145,11 +167,20 @@ const ItemDetails = () => {
             <FontAwesome name="bookmark" size={20} color={"#000"} />
             <Text style={[styles.buttonText, { color: "#000" }]}>Save</Text>
           </Pressable>
-
-          <Pressable style={styles.Button} onPress={handleChat}>
-            <Ionicons name="chatbubble" size={20} color={"#fff"} />
-            <Text style={styles.buttonText}>Message</Text>
-          </Pressable>
+          {otherUserId === userId ? (
+            <Pressable
+              style={styles.DeleteButton}
+              onPress={() => handleDelete()}
+            >
+              <Ionicons name="trash" size={20} color={"#fff"} />
+              <Text style={styles.buttonText}>Delete Item</Text>
+            </Pressable>
+          ) : (
+            <Pressable style={styles.Button} onPress={handleChat}>
+              <Ionicons name="chatbubble" size={20} color={"#fff"} />
+              <Text style={styles.buttonText}>Message</Text>
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.devider} />
@@ -271,11 +302,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  DeleteButton: {
+    borderRadius: 10,
+    backgroundColor: Colors.red,
+    paddingHorizontal: 50,
+    paddingVertical: 8,
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   buttonText: {
     color: "white",
     fontSize: 14,
     fontFamily: "Roboto",
   },
+
   title: {
     fontSize: 18,
     fontFamily: "RobotoSemiBold",

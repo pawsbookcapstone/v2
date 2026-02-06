@@ -99,8 +99,9 @@ const CreateProfile: React.FC = () => {
       setStep(2);
       return;
     }
-
+    // const newDocRef = doc(collection(db, "pages"));
     const payload = {
+      // id: newDocRef.id,
       name: pageName.trim(),
       categories: selectedCategories,
       allow_appointments: allowAppointments,

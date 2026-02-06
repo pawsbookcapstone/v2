@@ -1,4 +1,5 @@
-import { all, update } from "@/helpers/db";
+import { useAppContext } from "@/AppsProvider";
+import { all, getGroup, update, where } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import { AppointmentSkeleton } from "@/shared/components/AppointmentSkeletal";
 import HeaderWithActions from "@/shared/components/HeaderSet";
@@ -78,6 +79,7 @@ const cancellationReasons = [
 const tabs = ["All", "Upcoming", "Completed", "Cancelled"];
 
 const Appointment = () => {
+  const { userId } = useAppContext();
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -90,7 +92,7 @@ const Appointment = () => {
     string | null
   >(null);
   const [activeTab, setActiveTab] = useState("All");
-
+  // Assuming pageId is same as userId for pet owner
   // const onRefresh = () => {
   //   setRefreshing(true);
   //   setIsLoading(true);
@@ -143,7 +145,9 @@ const Appointment = () => {
     const fetchAppointments = async () => {
       try {
         setIsLoading(true);
-        const snapshot = await all("appointments"); // get all appointments
+        const snapshot = await getGroup("appointments").where(
+          where("ownerId", "==", userId),
+        );
         const data = snapshot.docs.map((doc) => {
           const d = doc.data() as any;
           return {
@@ -158,9 +162,11 @@ const Appointment = () => {
             providerName: d.providerName,
             providerAvatar: d.providerAvatar,
             location: d.location || "To be confirmed",
+            ownerId: d.ownerId,
           };
         });
         setAppointments(data);
+        console.log("Fetched appointments:", data);
       } catch (error) {
         console.error("Failed to fetch appointments:", error);
       } finally {

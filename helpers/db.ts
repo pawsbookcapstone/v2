@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getCountFromServer,
@@ -84,13 +85,21 @@ const getUserSavedItems = (userId: string) => {
       await get("users", userId, "savedItems").where(...whereCond),
   };
 };
+export const getGroup = (collectionName: string) => {
+  return {
+    where: async (...whereCond: QueryConstraint[]) =>
+      await getDocs(query(collectionGroup(db, collectionName), ...whereCond)),
+  };
+};
 
 export {
   add,
   all,
   count,
   find,
-  get, getUserSavedItems, orderBy,
+  get,
+  getUserSavedItems,
+  orderBy,
   remove,
   serverTimestamp,
   set,

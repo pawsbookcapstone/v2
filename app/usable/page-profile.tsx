@@ -1,3 +1,5 @@
+import { useAppContext } from "@/AppsProvider";
+import { all, get, where } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
@@ -5,6 +7,7 @@ import ProfileSkeleton from "@/shared/components/ProfileSkeleton";
 import { screens } from "@/shared/styles/styles";
 import { Entypo, Ionicons, MaterialIcons, Octicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+import { documentId } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   Dimensions,
@@ -19,9 +22,26 @@ import {
   View,
 } from "react-native";
 
+type PageData = {
+  id: string;
+  name: string;
+  profile_photo: string;
+  ownerId: string;
+};
+
+type Appointment = {
+  id: string;
+  petname: string;
+  location: string;
+  status: string;
+  selectedDate: string;
+  selectedTime: string;
+};
+
 const PageProfile = () => {
+  const { userId } = useAppContext();
   const {
-    id,
+    pageId,
     name,
     profileImage,
     cover_photo,
@@ -32,7 +52,7 @@ const PageProfile = () => {
     followers,
     following,
   } = useLocalSearchParams<{
-    id: string;
+    pageId: string;
     name: string;
     profileImage: string;
     cover_photo: string;
@@ -46,12 +66,14 @@ const PageProfile = () => {
   }>();
 
   const [followingStatus, setFollowingStatus] = useState(
-    isFollowing === "true"
+    isFollowing === "true",
   );
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<
     "posts" | "about" | "appointments"
   >("posts");
+  const [pageData, setPageData] = useState<PageData | null>(null);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
 
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedPostImages, setSelectedPostImages] = useState<string[]>([]);
@@ -64,7 +86,7 @@ const PageProfile = () => {
   }, []);
 
   const dummyProfile = {
-    id: id || "0",
+    id: pageId || "0",
     name: name || "Unknown Page",
     email: "contact@happypaws.com",
     phone_number: "09171234567",
@@ -101,22 +123,22 @@ const PageProfile = () => {
     },
   ]);
 
-  const [appointments, setAppointments] = useState([
-    {
-      id: 1,
-      petName: "Buddy",
-      date: "October 20, 2025",
-      time: "10:30 AM",
-      status: "Confirmed",
-    },
-    {
-      id: 2,
-      petName: "Milo",
-      date: "October 22, 2025",
-      time: "1:00 PM",
-      status: "Pending",
-    },
-  ]);
+  // const [appointments, setAppointments] = useState([
+  //   {
+  //     id: 1,
+  //     petName: "Buddy",
+  //     date: "October 20, 2025",
+  //     time: "10:30 AM",
+  //     status: "Confirmed",
+  //   },
+  //   {
+  //     id: 2,
+  //     petName: "Milo",
+  //     date: "October 22, 2025",
+  //     time: "1:00 PM",
+  //     status: "Pending",
+  //   },
+  // ]);
 
   const toggleLike = (id: number) => {
     setPosts((prev) =>
@@ -127,10 +149,52 @@ const PageProfile = () => {
               liked: !p.liked,
               likes: p.liked ? p.likes - 1 : p.likes + 1,
             }
-          : p
-      )
+          : p,
+      ),
     );
   };
+
+  useEffect(() => {
+    const fetchPage = async () => {
+      try {
+        //for pages
+        const pagesSnap = await get("pages").where(
+          where(documentId(), "==", pageId),
+        );
+        const pages = pagesSnap.docs.map((s) => {
+          const d = s.data();
+          return {
+            id: s.id,
+            name: d.name,
+            profile_photo: d.profile,
+            ownerId: d.ownerId,
+          };
+        });
+        setPageData(pages[0]);
+
+        //for appoinments
+        const appointmentSnap = await all("pages", pageId, "appointments");
+        const appointments = appointmentSnap.docs.map((s) => {
+          const d = s.data();
+          return {
+            id: s.id,
+            petname: d.petName,
+            location: d.location,
+            status: d.status,
+            selectedDate: d.selectedDate?.toDate().toLocaleString() ?? "",
+            selectedTime: d.selectedTime,
+          };
+        });
+        setPageData(pages[0]);
+        setAppointments(appointments);
+
+        console.log(pageData);
+      } catch (error) {
+        console.error("Error fetching page data:", error);
+      }
+    };
+    fetchPage();
+  }, []);
 
   return (
     <View style={screens.screen}>
@@ -165,12 +229,16 @@ const PageProfile = () => {
           <View style={styles.profileHeader}>
             <View style={styles.profilePhoto}>
               <Image
-                source={{ uri: dummyProfile.profile_photo }}
+                source={{
+                  uri: pageData?.profile_photo || dummyProfile.profile_photo,
+                }}
                 style={styles.profileImage}
               />
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.name}>{dummyProfile.name}</Text>
+              <Text style={styles.name}>
+                {pageData?.name || "Unnamed Page"}
+              </Text>
               <Text style={styles.followers}>
                 <Text style={{ fontWeight: "bold" }}>{followers || "0"} </Text>
                 Followers,{" "}
@@ -206,14 +274,30 @@ const PageProfile = () => {
                 </>
               )}
             </Pressable>
-
-            <Pressable
-              style={[styles.actionButton, { backgroundColor: Colors.primary }]}
-              onPress={() => router.push("/pet-owner/(chat)/chat-field")}
-            >
-              <Ionicons name="chatbubble-sharp" size={17} color="white" />
-              <Text style={styles.actionButtonText}>Message</Text>
-            </Pressable>
+            {pageData?.ownerId === userId ? (
+              <Pressable
+                disabled={true} // disable if you don't have the edit functionality yet
+                style={[
+                  styles.actionButton,
+                  { backgroundColor: Colors.primary },
+                ]}
+                onPress={() => router.push("/pet-owner/(chat)/chat-field")}
+              >
+                <Ionicons name="pencil" size={17} color="white" />
+                <Text style={styles.actionButtonText}>Edit Page</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={[
+                  styles.actionButton,
+                  { backgroundColor: Colors.secondary },
+                ]} // different color example
+                onPress={() => router.push("/pet-owner/(chat)/chat-field")}
+              >
+                <Ionicons name="chatbubble-sharp" size={17} color="white" />
+                <Text style={styles.actionButtonText}>Message</Text>
+              </Pressable>
+            )}
           </View>
 
           {/* --- Tabs --- */}
@@ -447,7 +531,7 @@ const PageProfile = () => {
               {appointments.map((appt) => (
                 <View key={appt.id} style={styles.appointmentCard}>
                   <View style={styles.appointmentHeader}>
-                    <Text style={styles.appointmentPet}>🐶 {appt.petName}</Text>
+                    <Text style={styles.appointmentPet}>🐶 {appt.petname}</Text>
                     <View
                       style={[
                         styles.statusBadge,
@@ -456,8 +540,8 @@ const PageProfile = () => {
                             appt.status === "Confirmed"
                               ? "#E6F4EA"
                               : appt.status === "Pending"
-                              ? "#FFF4E5"
-                              : "#F5F5F5",
+                                ? "#FFF4E5"
+                                : "#F5F5F5",
                         },
                       ]}
                     >
@@ -469,8 +553,8 @@ const PageProfile = () => {
                               appt.status === "Confirmed"
                                 ? "#34A853"
                                 : appt.status === "Pending"
-                                ? "#FBBC05"
-                                : "#999",
+                                  ? "#FBBC05"
+                                  : "#999",
                           },
                         ]}
                       >
@@ -485,7 +569,9 @@ const PageProfile = () => {
                       size={16}
                       color={Colors.primary}
                     />
-                    <Text style={styles.appointmentDetail}>{appt.date}</Text>
+                    <Text style={styles.appointmentDetail}>
+                      {appt.selectedDate}
+                    </Text>
                   </View>
 
                   <View style={styles.appointmentDetailsRow}>
@@ -494,7 +580,9 @@ const PageProfile = () => {
                       size={16}
                       color={Colors.primary}
                     />
-                    <Text style={styles.appointmentDetail}>{appt.time}</Text>
+                    <Text style={styles.appointmentDetail}>
+                      {appt.selectedTime}
+                    </Text>
                   </View>
                 </View>
               ))}

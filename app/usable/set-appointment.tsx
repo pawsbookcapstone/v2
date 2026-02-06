@@ -1,3 +1,4 @@
+import { useAppContext } from "@/AppsProvider";
 import { add, serverTimestamp } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
@@ -17,7 +18,7 @@ import {
 
 const SetAppointment = () => {
   const { name, type } = useLocalSearchParams();
-
+  const { userId } = useAppContext();
   const [fullName, setFullName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -29,6 +30,7 @@ const SetAppointment = () => {
   //new code ito
   const { providerId, providerName, providerType, providerImage } =
     useLocalSearchParams();
+  const providerIdStr = Array.isArray(providerId) ? providerId[0] : providerId;
   const [petName, setPetName] = useState("");
   // const [date, setDate] = useState("");
   // // const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -62,7 +64,7 @@ const SetAppointment = () => {
     try {
       setLoading(true);
 
-      await add("appointments").value({
+      await add("pages", providerIdStr, "appointments").value({
         // type: providerType,
         petName,
         selectedDate,
@@ -73,7 +75,7 @@ const SetAppointment = () => {
         providerAvatar: providerImage,
         location: "To be confirmed",
         createdAt: serverTimestamp(),
-        // ownerId: user.uid   // add later if needed
+        ownerId: userId,
       });
 
       router.replace("/pet-owner/(menu)/appointment");

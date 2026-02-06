@@ -66,62 +66,83 @@ const Search = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const snap = await get("users", userId, "recent_searches").where(
+        // 🔹 Recent searches
+        const recentSnap = await get("users", userId, "recent_searches").where(
           orderBy("date", "desc"),
           limit(10),
         );
 
         setRecentSearches(
-          snap.docs.map((doc) => {
+          recentSnap.docs.map((doc) => {
             const d = doc.data();
             return {
               id: doc.id,
               name: d.name,
               img_path: d.img_path ?? "",
+              type: d.type,
             };
           }),
         );
-      } catch (e) {
-        console.log("Failed to fetch recent searches:", e);
-      }
 
+        // 🔹 Friends
+        const friendsSnap = await get("friends").where(
+          where("users", "array-contains", userId),
+        );
 
-      const snap = await all("users");
-      const friendsSnap = await get("friends").where(
-        where("users", "array-contains", userId),
-      );
-      let friendsData: { [key: string]: { id: string; status: FriendStatus } } =
-        {};
-      for (const i in friendsSnap.docs) {
-        const sn = friendsSnap.docs[i];
-        const _temp = sn.data();
-        const otherUserId =
-          _temp.users[0] === userId ? _temp.users[1] : _temp.users[0];
-        friendsData[otherUserId] = {
-          id: sn.id,
-          status: _temp.confirmed ? "Friend" : "Pending Friend Request",
-        };
-      }
-      setUsers(
-        snap.docs.map((user: any) => {
+        let friendsData: Record<string, { id: string; status: FriendStatus }> =
+          {};
+        for (const sn of friendsSnap.docs) {
+          const d = sn.data();
+          const otherUserId = d.users[0] === userId ? d.users[1] : d.users[0];
+
+          friendsData[otherUserId] = {
+            id: sn.id,
+            status: d.confirmed ? "Friend" : "Pending Friend Request",
+          };
+        }
+
+        // 🔹 Users
+        const usersSnap = await all("users");
+        const users = usersSnap.docs.map((user: any) => {
           const d = user.data();
           const _friend = friendsData[user.id];
+
           return {
             id: user.id,
             name: `${d.firstname} ${d.lastname}`,
             img_path: d.img_path,
+            type: "user",
             status: _friend?.status ?? "Not Friend",
             friend_id: _friend?.id,
           };
-        }),
-      );
+        });
+
+        // 🔹 Pages
+        const pagesSnap = await get("pages").where();
+        const pages = pagesSnap.docs.map((doc) => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            name: d.name,
+            img_path: d.profile ?? "",
+            type: "page",
+            ownerId: d.ownerId,
+          };
+        });
+
+        // 🔹 Merge
+        setUsers([...users, ...pages]);
+      } catch (e) {
+        console.log("Failed to fetch search data:", e);
+      }
     };
+
     fetchUsers();
   }, []);
 
   const handleDelete = (id: string) => {
     setRecentSearches((prev) => prev.filter((item) => item.id !== id));
-    remove("users", userId, "recent_searches", id)
+    remove("users", userId, "recent_searches", id);
     setShowDropdown(false);
   };
 
@@ -153,10 +174,15 @@ const Search = () => {
         style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
         activeOpacity={0.7}
         onPress={() =>
-          router.push({
-            pathname: "/usable/user-profile",
-            params: { userToViewId: item.id },
-          })
+          item.type === "page"
+            ? router.push({
+                pathname: "/usable/page-profile",
+                params: { pageId: item.id },
+              })
+            : router.push({
+                pathname: "/usable/user-profile",
+                params: { userToViewId: item.id },
+              })
         }
       >
         <Image
@@ -227,13 +253,23 @@ const Search = () => {
     }
   };
 
-  const handleSeeProfile = (item:any) => {
+  const handleSeeProfile = (item: any) => {
     saveRecentSearch(item);
+
+    if (item.type === "page") {
+      router.push({
+        pathname: "/usable/page-profile",
+        params: { pageId: item.id },
+      });
+      return;
+    }
+
+    // default → user
     router.push({
       pathname: "/usable/user-profile",
       params: { userToViewId: item.id },
-    })
-  }
+    });
+  };
 
   const saveRecentSearch = async (item: any) => {
     if (!userId) return;
@@ -243,6 +279,7 @@ const Search = () => {
         name: item.name,
         img_path: item.img_path ?? null,
         date: serverTimestamp(),
+        type: item.type,
       });
     } catch (e) {
       console.log("Failed to save recent search:", e);
@@ -279,14 +316,14 @@ const Search = () => {
         },
       });
       console.log(res.id);
-      
+
       addNotif({
         receiver_id: item.id,
         href: "/pet-owner/my-friends",
         type: "Sent Friend Request",
         params: {
           id: res.id,
-        }
+        },
       });
     } catch (e) {
       Alert.alert("Error", String(e));

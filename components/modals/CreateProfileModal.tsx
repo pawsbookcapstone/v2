@@ -119,7 +119,9 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({
         );
 
         //for pages
-        const pagesSnap = await get("pages").where(where("ownerId", "in", ids));
+        const pagesSnap = await get("pages").where(
+          where("ownerId", "==", userId),
+        );
         const pages = pagesSnap.docs.map((s) => {
           const d = s.data();
           return {
@@ -196,7 +198,9 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({
                     <Pressable
                       key={page.id}
                       style={[styles.profileRow]}
-                      // onPress={() => handleSelectProfile(profile)}
+                      onPress={() =>
+                        router.push(`/usable/page-profile?pageId=${page.id}`)
+                      }
                     >
                       <Image
                         source={{ uri: page.avatar }}
