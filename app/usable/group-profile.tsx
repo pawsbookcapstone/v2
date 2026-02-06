@@ -1,5 +1,5 @@
 import { useAppContext } from "@/AppsProvider";
-import { all, remove, serverTimestamp, set, update } from "@/helpers/db";
+import { add, all, remove, serverTimestamp, set, update } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
@@ -73,6 +73,7 @@ export default function GroupProfile() {
   // useEffect(() => {
   //   console.log("ID", id);
   // }, []);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [posts, setPosts] = useState<Post[]>([
     // {
     //   id: "1",
@@ -100,6 +101,8 @@ export default function GroupProfile() {
     const fetchPosts = async () => {
       try {
         const postsData = await all("groups", groupId, "posts");
+        // const commentsData = await all("groups", groupId, "posts", "comments");
+
         const items = postsData.docs.map((doc) => {
           const data = doc.data();
 
@@ -119,6 +122,7 @@ export default function GroupProfile() {
         });
 
         setPosts(items);
+        // setComments(commentsData.docs.map((doc) => doc.data() as Comment));
         // console.log("Fetched posts:", items);
       } catch (error) {
         console.error("Error fetching posts:", error);
@@ -160,10 +164,11 @@ export default function GroupProfile() {
         if (post.id === postId && post.newComment.trim()) {
           const newComment: Comment = {
             id: Date.now().toString(),
-            user: "You",
+            user: userName,
             text: post.newComment,
             profileImage: userImagePath,
           };
+          add("groups", groupId, "posts", postId, "comments").value(newComment);
           return {
             ...post,
             comments: [...post.comments, newComment],
@@ -479,7 +484,7 @@ export default function GroupProfile() {
                 {/* Comments */}
                 {post.showComments && (
                   <View style={styles.commentSection}>
-                    {post.comments.map((comment) => (
+                    {comments.map((comment) => (
                       <View key={comment.id} style={styles.commentRow}>
                         <Image
                           source={{ uri: comment.profileImage }}

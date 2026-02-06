@@ -13,6 +13,7 @@ import {
   where,
 } from "@/helpers/db";
 import { useNotifHook } from "@/helpers/notifHook";
+import { savePosts } from "@/helpers/savedItems";
 import { computeTimePassed } from "@/helpers/timeConverter";
 import { useNotificationHook } from "@/hooks/notificationHook";
 import { Colors } from "@/shared/colors/Colors";
@@ -253,7 +254,7 @@ const Home = () => {
   );
 
   const addNotif = useNotifHook();
-  const hasNotif = useNotificationHook()
+  const hasNotif = useNotificationHook();
 
   // const onRefresh = async () => {
   //   setLoading(true);
@@ -299,7 +300,7 @@ const Home = () => {
   //         })),
   //         date_ago: computeTimePassed(d.date.toDate()),
   //       });
-        
+
   //     }
 
   //     setPosts(_posts);
@@ -334,17 +335,17 @@ const Home = () => {
 
       const chunk = (arr: any[], size = 10) =>
         Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
-          arr.slice(i * size, i * size + size)
+          arr.slice(i * size, i * size + size),
         );
 
       // 2️⃣ Fetch posts (handle Firestore IN limit)
       const postSnaps = await Promise.all(
-        chunk(friendIds).map((ids:string[]) =>
+        chunk(friendIds).map((ids: string[]) =>
           get("posts").where(
             where("creator_id", "in", ids),
             orderBy("date", "desc"),
-          )
-        )
+          ),
+        ),
       );
 
       const postsDocs = postSnaps.flatMap((s) => s.docs);
@@ -352,35 +353,33 @@ const Home = () => {
       // 3️⃣ Collect shared post IDs
       const sharedIds = [
         ...new Set(
-          postsDocs
-            .map((d) => d.data().shared_post_id)
-            .filter(Boolean)
+          postsDocs.map((d) => d.data().shared_post_id).filter(Boolean),
         ),
       ];
 
       // 4️⃣ Fetch shared posts in parallel
       const sharedMap: Record<string, any> = {};
       await Promise.all(
-        sharedIds.map(async (id:any) => {
+        sharedIds.map(async (id: any) => {
           const snap = await find("posts", id);
           if (snap.exists()) sharedMap[id] = snap.data();
-        })
+        }),
       );
 
       // 5️⃣ Fetch comments in parallel
       const commentsMap: Record<string, any[]> = {};
       await Promise.all(
-        postsDocs.map(async (dc:any) => {
+        postsDocs.map(async (dc: any) => {
           const commentSnap = await all("posts", dc.id, "comments");
           commentsMap[dc.id] = commentSnap.docs.map((c: any) => ({
             id: c.id,
             ...c.data(),
           }));
-        })
+        }),
       );
 
       // 6️⃣ Build final posts
-      const _posts = postsDocs.map((dc:any) => {
+      const _posts = postsDocs.map((dc: any) => {
         const d = dc.data();
 
         return {
@@ -403,7 +402,6 @@ const Home = () => {
       setLoading(false);
     }
   };
-
 
   useEffect(() => {
     onRefresh();
@@ -587,6 +585,34 @@ const Home = () => {
     }
   };
 
+  //saved posts
+  const handleSaveItem = async (item: (typeof posts)[0]) => {
+    if (!userId) {
+      alert("You must be logged in to save items.");
+      return;
+    }
+
+    if (!item.id) {
+      alert("Post ID is missing!");
+      return;
+    }
+
+    await savePosts(userId, {
+      id: item.id,
+      body: item.body,
+      // petCategory: item.category,
+      // petImage: item.petImage,
+      images: item.img_paths,
+      ownerId: item.creator_id,
+      ownerName: item.creator_name,
+      ownerImage: item.creator_img_path,
+      saveCategory: item.saveCategory,
+    });
+
+    alert("Item saved to your collection!");
+    console.log("Saved item:");
+  };
+
   const renderShared = (item: any) => {
     const maxImagesToShow = 3;
     const extraImages = (item.img_paths ?? []).length - maxImagesToShow;
@@ -622,7 +648,7 @@ const Home = () => {
               </View>
             </View>
           </Pressable>
-          </View>
+        </View>
 
         {/* Content */}
         <Text style={styles.postContent}>{item.body}</Text>
@@ -680,8 +706,9 @@ const Home = () => {
               ))}
           </View>
         )}
-      </View>)
-      }
+      </View>
+    );
+  };
 
   const renderPost = ({ item }: any) => {
     const maxImagesToShow = 3;
@@ -870,6 +897,16 @@ const Home = () => {
               <Text style={styles.countText}>{item.shares}</Text>
             </TouchableOpacity>
           )}
+
+          {/* saved Buttons */}
+
+          <Pressable
+            style={[styles.actionBtn, { backgroundColor: Colors.buttonlogin }]}
+            onPress={() => handleSaveItem(item)}
+          >
+            <FontAwesome name="bookmark" size={18} color={"#282222"} />
+            {/* <Text style={[styles.actionBtn, { color: "#000" }]}>Save</Text> */}
+          </Pressable>
         </View>
 
         {/* Comments */}
@@ -943,19 +980,19 @@ const Home = () => {
           </Pressable>
           <Pressable onPress={() => router.push("/pet-owner/notifications")}>
             <Feather name="bell" size={24} color="black" />
-            {
-              hasNotif && 
-                    <View
-                      style={{
-                        position: "absolute",
-                        top: -1,
-                        right: 1,
-                        width: 8,
-                        height: 8,
-                        borderRadius: 5,
-                        backgroundColor: "red",
-                      }}
-                    />}
+            {hasNotif && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: -1,
+                  right: 1,
+                  width: 8,
+                  height: 8,
+                  borderRadius: 5,
+                  backgroundColor: "red",
+                }}
+              />
+            )}
           </Pressable>
           <Pressable onPress={() => router.push("/pet-owner/search")}>
             <Feather name="search" size={24} color="black" />
@@ -1173,13 +1210,13 @@ const styles = StyleSheet.create({
   },
   sharedPostCard: {
     borderWidth: 1,
-    borderBottomWidth:0,
+    borderBottomWidth: 0,
     borderColor: Colors.lightGray,
     marginTop: 10,
     padding: 10,
     borderRadius: 10,
-    borderBottomRightRadius:0,
-    borderBottomLeftRadius:0,
+    borderBottomRightRadius: 0,
+    borderBottomLeftRadius: 0,
     width: "95%",
     alignSelf: "center",
   },

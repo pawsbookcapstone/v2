@@ -30,6 +30,10 @@ type PostItem = BaseSavedItem & {
   title: string;
   description: string;
   time: string;
+  images: string[];
+  ownerId?: string;
+  ownerName: string;
+  ownerImage: string;
 };
 
 type MarketplaceItem = BaseSavedItem & {
@@ -130,9 +134,13 @@ const Saved = () => {
                 id: doc.id,
                 saveCategory: "posts",
                 images,
-                title: data.title ?? "",
+                title: data.body ?? "",
                 description: data.description ?? "",
-                time: data.time ?? "",
+
+                time: data.time?.toDate().toLocaleString() ?? "",
+                ownerId: data.ownerId,
+                ownerName: data.ownerName ?? "",
+                ownerImage: data.ownerImage ?? "",
               };
 
             case "adopt":
@@ -218,7 +226,15 @@ const Saved = () => {
         images = post.images;
         title = post.title;
         description = post.description;
-        extraInfo = <Text style={styles.time}>{post.time}</Text>;
+        extraInfo = (
+          <View style={styles.ownerRow}>
+            <Image
+              source={{ uri: post.ownerImage }}
+              style={styles.ownerImage}
+            />
+            <Text style={styles.ownerName}>{post.ownerName}</Text>
+          </View>
+        );
         break;
       }
 
@@ -228,13 +244,15 @@ const Saved = () => {
         title = market.name;
         description = market.description;
         extraInfo = (
-          <View style={styles.ownerRow}>
-            <Image
-              source={{ uri: market.ownerImage }}
-              style={styles.ownerImage}
-            />
-            <Text style={styles.price}>{market.price}</Text>;
-            <Text style={styles.ownerName}>{market.ownerName}</Text>
+          <View>
+            <Text style={styles.price}>Price: {market.price}</Text>;
+            <View style={styles.ownerRow}>
+              <Image
+                source={{ uri: market.ownerImage }}
+                style={styles.ownerImage}
+              />
+              <Text style={styles.ownerName}>{market.ownerName}</Text>
+            </View>
           </View>
         );
 
