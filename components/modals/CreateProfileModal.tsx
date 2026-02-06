@@ -4,7 +4,7 @@ import { auth } from "@/helpers/firebase";
 import { Colors } from "@/shared/colors/Colors";
 import Loader from "@/shared/components/Loader";
 import { MaterialIcons } from "@expo/vector-icons";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -20,7 +20,13 @@ import {
 type Profile = {
   id: string;
   name: string;
-  email:string;
+  email: string;
+  avatar: string;
+};
+
+type Pages = {
+  id: string;
+  name: string;
   avatar: string;
 };
 
@@ -35,7 +41,7 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({
   onClose,
   onSelectProfile,
 }) => {
-  const {userId, setUserId} = useAppContext()
+  const { userId, setUserId } = useAppContext();
 
   const [isLoading, setIsLoading] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([
@@ -50,26 +56,30 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({
     //   avatar: "https://randomuser.me/api/portraits/women/44.jpg",
     // },
   ]);
+  const [pages, setPages] = useState<Pages[]>([]);
 
   // const [activeProfile, setActiveProfile] = useState<Profile | null>(null);
 
   const handleSelectProfile = async (profile: Profile) => {
     // setActiveProfile(profile);
-    onClose()
-    
-    if (profile.id === userId){
-      return
+    onClose();
+
+    if (profile.id === userId) {
+      return;
     }
-    set("users", userId).value({ last_online_at: serverTimestamp(), active_status: 'inactive' });
-    setUserId(null)
+    set("users", userId).value({
+      last_online_at: serverTimestamp(),
+      active_status: "inactive",
+    });
+    setUserId(null);
     auth.signOut();
 
     router.push({
-      pathname:'/auth/Login',
+      pathname: "/auth/Login",
       params: {
-        email: profile.email
-      }
-    })
+        email: profile.email,
+      },
+    });
 
     // Wait briefly to show the check
     // setTimeout(() => {
@@ -90,29 +100,43 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({
   useEffect(() => {
     const getProfiles = async () => {
       try {
-        const _profiles = await AsyncStorage.getItem('profiles')
-        const ids = _profiles?.split(',')
-        const snap = await get('users').where(where('id', 'in', ids))
-        setProfiles(snap.docs.map(s => {
-          const d = s.data()
-          const v = {
-            id: d.id,
-            email: d.email,
-            name: `${d.firstname} ${d.lastname}`,
-            avatar: d.img_path
-          }
-          // if(d.id == userId)
-          //   setActiveProfile(v)
-          return v
-        }));
-      } catch(e) {
-        console.log(e);
-        
-      }
-    }
+        const _profiles = await AsyncStorage.getItem("profiles");
+        const ids = _profiles?.split(",");
+        const snap = await get("users").where(where("id", "in", ids));
+        setProfiles(
+          snap.docs.map((s) => {
+            const d = s.data();
+            const v = {
+              id: d.id,
+              email: d.email,
+              name: `${d.firstname} ${d.lastname}`,
+              avatar: d.img_path,
+            };
+            // if(d.id == userId)
+            //   setActiveProfile(v)
+            return v;
+          }),
+        );
 
-    getProfiles()
-  }, [])
+        //for pages
+        const pagesSnap = await get("pages").where(where("ownerId", "in", ids));
+        const pages = pagesSnap.docs.map((s) => {
+          const d = s.data();
+          return {
+            id: s.id,
+            name: d.name,
+            avatar: d.profile,
+            // ownerId: d.ownerId
+          };
+        });
+        setPages(pages);
+      } catch (e) {
+        console.log(e);
+      }
+    };
+
+    getProfiles();
+  }, []);
 
   return (
     <>
@@ -162,6 +186,35 @@ const CreateProfileModal: React.FC<CreateProfileModalProps> = ({
               </View>
 
               <View style={styles.divider} />
+
+              {/* pages */}
+              <View style={styles.profileList}>
+                <Text style={styles.headerRow}>My Pages</Text>
+                {pages.map((page) => {
+                  const isActive = page.id === userId;
+                  return (
+                    <Pressable
+                      key={page.id}
+                      style={[styles.profileRow]}
+                      // onPress={() => handleSelectProfile(profile)}
+                    >
+                      <Image
+                        source={{ uri: page.avatar }}
+                        style={styles.avatar}
+                      />
+                      <Text style={styles.profileName}>{page.name}</Text>
+                      {isActive && (
+                        <MaterialIcons
+                          name="check-circle"
+                          size={22}
+                          color={Colors.primary}
+                          style={{ marginLeft: "auto" }}
+                        />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
 
               {/* Add New Profile */}
               <Pressable

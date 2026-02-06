@@ -45,7 +45,15 @@ const SetAppointment = () => {
   // }
 
   const createAppointment = async () => {
-    console.log(providerId, providerImage, providerName);
+    console.log(
+      "Creating appointment with:",
+      type,
+      petName,
+      providerId,
+      providerName,
+      providerType,
+      providerImage,
+    );
     if (!petName || !contactNumber || !selectedDate || !selectedTime) {
       alert("Please complete all fields");
       return;
@@ -55,7 +63,7 @@ const SetAppointment = () => {
       setLoading(true);
 
       await add("appointments").value({
-        type: providerType,
+        // type: providerType,
         petName,
         selectedDate,
         selectedTime,
@@ -86,6 +94,7 @@ const SetAppointment = () => {
     });
 
   useEffect(() => {
+    console.log(providerId, providerImage, providerName);
     if (selectedDate) {
       const dateKey = selectedDate.toISOString().split("T")[0];
 

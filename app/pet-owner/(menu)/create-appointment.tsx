@@ -1,10 +1,11 @@
+import { get, where } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { screens } from "@/shared/styles/styles";
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   FlatList,
   Image,
@@ -18,56 +19,80 @@ import {
 type TProviders = {
   id: string;
   name: string;
-  type: string;
+  type: string[];
   image: string;
 };
 
 const dummyProviders: TProviders[] = [
-  {
-    id: "1",
-    name: "Happy Paws Veterinary Clinic",
-    type: "Veterinarian",
-    image:
-      "https://images.unsplash.com/photo-1612831455543-43a0b47c923e?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    id: "2",
-    name: "FurEver Grooming Hub",
-    type: "Groomer",
-    image:
-      "https://images.unsplash.com/photo-1601758123927-1965c9b7a4b1?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    id: "3",
-    name: "Pawsitive Training Center",
-    type: "Trainer",
-    image:
-      "https://images.unsplash.com/photo-1598133894008-1a94c7dd6c4c?auto=format&fit=crop&w=800&q=80",
-  },
-  {
-    id: "4",
-    name: "Healthy Tails Pet Spa",
-    type: "Groomer",
-    image:
-      "https://images.unsplash.com/photo-1592194996308-7b43878e84a6?auto=format&fit=crop&w=800&q=80",
-  },
+  // {
+  //   id: "1",
+  //   name: "Happy Paws Veterinary Clinic",
+  //   type: "Veterinarian",
+  //   image:
+  //     "https://images.unsplash.com/photo-1612831455543-43a0b47c923e?auto=format&fit=crop&w=800&q=80",
+  // },
+  // {
+  //   id: "2",
+  //   name: "FurEver Grooming Hub",
+  //   type: "Groomer",
+  //   image:
+  //     "https://images.unsplash.com/photo-1601758123927-1965c9b7a4b1?auto=format&fit=crop&w=800&q=80",
+  // },
+  // {
+  //   id: "3",
+  //   name: "Pawsitive Training Center",
+  //   type: "Trainer",
+  //   image:
+  //     "https://images.unsplash.com/photo-1598133894008-1a94c7dd6c4c?auto=format&fit=crop&w=800&q=80",
+  // },
+  // {
+  //   id: "4",
+  //   name: "Healthy Tails Pet Spa",
+  //   type: "Groomer",
+  //   image:
+  //     "https://images.unsplash.com/photo-1592194996308-7b43878e84a6?auto=format&fit=crop&w=800&q=80",
+  // },
 ];
 
 const CreateAppointment = () => {
   const [searchQuery, setSearchQuery] = useState("");
-
+  const [providers, setProviders] = useState<TProviders[]>([]);
   const filteredProviders = dummyProviders.filter((provider) =>
     provider.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
-  const handleAppointment = (provider: TProviders) => {
+
+  useEffect(() => {
+    const fetchProviders = async () => {
+      try {
+        const fetchPages = await get("pages").where(
+          where("allow_appointments", "==", true),
+        );
+
+        const data = fetchPages.docs.map((doc: any) => ({
+          id: doc.id,
+          name: doc.data().name,
+          type: doc.data().categories || [],
+          image: doc.data().profile,
+        })) as TProviders[];
+
+        setProviders(data);
+      } catch (error) {
+        console.error("Error fetching providers:", error);
+      }
+    };
+
+    fetchProviders();
+  }, []);
+
+  const handleAppointment = (providers: TProviders) => {
     // Navigate to set-appointment and pass provider data
     router.push({
       pathname: "/usable/set-appointment",
       params: {
-        providerId: provider.id,
-        providerName: provider.name,
-        providerType: provider.type,
-        providerImage: provider.image,
+        providerId: providers.id,
+        providerName: providers.name,
+        providerType: providers.type,
+        providerImage: providers.image,
       },
     });
   };
@@ -95,7 +120,7 @@ const CreateAppointment = () => {
 
       {/* Provider List */}
       <FlatList
-        data={filteredProviders}
+        data={providers}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         renderItem={({ item }) => (
@@ -107,7 +132,9 @@ const CreateAppointment = () => {
             <Image source={{ uri: item.image }} style={styles.image} />
             <View style={styles.cardContent}>
               <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.type}>{item.type}</Text>
+              <Text style={styles.type}>
+                {Array.isArray(item.type) ? item.type.join(", ") : item.type}
+              </Text>
             </View>
           </Pressable>
         )}

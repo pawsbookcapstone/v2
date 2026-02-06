@@ -1,15 +1,18 @@
 // creatProfile.tsx
+import { useAppContext } from "@/AppsProvider";
 import { add } from "@/helpers/db";
 import { Colors } from "@/shared/colors/Colors";
 import HeaderWithActions from "@/shared/components/HeaderSet";
 import HeaderLayout from "@/shared/components/MainHeaderLayout";
 import { screens } from "@/shared/styles/styles";
 import { FontAwesome } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { serverTimestamp } from "firebase/firestore";
 import React, { useMemo, useState } from "react";
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -34,15 +37,30 @@ const CATEGORIES = [
 
 const CreateProfile: React.FC = () => {
   const [step, setStep] = useState<number>(1);
+  const { userId } = useAppContext();
   const [pageName, setPageName] = useState<string>("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-const [allowAppointments, setAllowAppointments] = useState(false);
+  const [allowAppointments, setAllowAppointments] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
 
+  const openImagePicker = async (type: "profile") => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const imageUri = result.assets[0].uri; // ✅ NOW DEFINED
+      setProfileImage(imageUri);
+    }
+  };
 
   const toggleCategory = (label: string) => {
     setSelectedCategories((prev) =>
-      prev.includes(label) ? prev.filter((p) => p !== label) : [...prev, label]
+      prev.includes(label) ? prev.filter((p) => p !== label) : [...prev, label],
     );
   };
 
@@ -58,11 +76,11 @@ const [allowAppointments, setAllowAppointments] = useState(false);
       setError(
         step === 1
           ? "Please enter a page name."
-          : "Select at least one category."
+          : "Select at least one category.",
       );
       return;
     }
-    setStep((s) => Math.min(3, s + 1));
+    setStep((s) => Math.min(4, s + 1));
   };
 
   const prev = () => {
@@ -86,10 +104,12 @@ const [allowAppointments, setAllowAppointments] = useState(false);
       name: pageName.trim(),
       categories: selectedCategories,
       allow_appointments: allowAppointments,
-      created_at: serverTimestamp()
+      profile: profileImage,
+      created_at: serverTimestamp(),
+      ownerId: userId,
     };
 
-    add('pages').value(payload)
+    add("pages").value(payload);
 
     // TODO: replace this with your API / store logic
     console.log("Created profile:", payload);
@@ -105,7 +125,7 @@ const [allowAppointments, setAllowAppointments] = useState(false);
             router.back();
           },
         },
-      ]
+      ],
     );
   };
 
@@ -146,6 +166,7 @@ const [allowAppointments, setAllowAppointments] = useState(false);
               2
             </Text>
           </View>
+
           <View style={styles.stepLine} />
           <View style={[styles.stepDot, step >= 3 && styles.stepDotActive]}>
             <Text
@@ -155,6 +176,18 @@ const [allowAppointments, setAllowAppointments] = useState(false);
               ]}
             >
               3
+            </Text>
+          </View>
+
+          <View style={styles.stepLine} />
+          <View style={[styles.stepDot, step >= 4 && styles.stepDotActive]}>
+            <Text
+              style={[
+                styles.stepDotText,
+                step >= 4 && styles.stepDotTextActive,
+              ]}
+            >
+              4
             </Text>
           </View>
         </View>
@@ -177,19 +210,17 @@ const [allowAppointments, setAllowAppointments] = useState(false);
                 accessibilityLabel="Page name input"
               />
 
-<Pressable
-  style={styles.toggleRow}
-  onPress={() => setAllowAppointments((prev) => !prev)}
->
-  <FontAwesome
-    name={allowAppointments ? "check-square" : "square-o"}
-    size={20}
-    color={allowAppointments ? Colors.primary : "#888"}
-  />
-  <Text style={styles.toggleText}>Allow Appointments</Text>
-</Pressable>
-
-
+              <Pressable
+                style={styles.toggleRow}
+                onPress={() => setAllowAppointments((prev) => !prev)}
+              >
+                <FontAwesome
+                  name={allowAppointments ? "check-square" : "square-o"}
+                  size={20}
+                  color={allowAppointments ? Colors.primary : "#888"}
+                />
+                <Text style={styles.toggleText}>Allow Appointments</Text>
+              </Pressable>
 
               <Text style={styles.hint}>
                 This name will appear on your PaswBook profile page.
@@ -233,7 +264,49 @@ const [allowAppointments, setAllowAppointments] = useState(false);
 
           {step === 3 && (
             <View style={styles.stepCard}>
-              <Text style={styles.stepTitle}>3. Review & Create</Text>
+              <Text style={styles.stepTitle}>3. Profile Setup</Text>
+
+              {/* Profile Photo */}
+              <View style={styles.profilePhotoContainer}>
+                <Pressable onPress={() => openImagePicker("profile")}>
+                  {profileImage ? (
+                    <Image
+                      source={{ uri: profileImage }}
+                      style={styles.profileImage}
+                    />
+                  ) : (
+                    <FontAwesome
+                      name="user-circle"
+                      size={100}
+                      color={Colors.gray}
+                    />
+                  )}
+
+                  <View style={styles.profileEditIcon}>
+                    <FontAwesome name="camera" size={16} color={Colors.white} />
+                  </View>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {step === 4 && (
+            <View style={styles.stepCard}>
+              <Text style={styles.stepTitle}>4. Review & Create</Text>
+
+              {/* ✅ Profile Image Preview */}
+              <View style={styles.reviewProfileContainer}>
+                {profileImage ? (
+                  <Image
+                    source={{ uri: profileImage }}
+                    style={styles.reviewProfileImage}
+                  />
+                ) : (
+                  <View style={styles.reviewProfilePlaceholder}>
+                    <FontAwesome name="user" size={36} color={Colors.gray} />
+                  </View>
+                )}
+              </View>
 
               <View style={styles.reviewRow}>
                 <Text style={styles.reviewLabel}>Page name</Text>
@@ -285,7 +358,7 @@ const [allowAppointments, setAllowAppointments] = useState(false);
               </Text>
             </Pressable>
 
-            {step < 3 ? (
+            {step < 4 ? (
               <Pressable
                 onPress={next}
                 style={[
@@ -352,18 +425,18 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 32,
   },
-toggleRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginTop: 12,
-  gap: 8,
-marginBottom: 8
-},
-toggleText: {
-  fontSize: 14,
-  fontFamily: "Roboto",
-  color: "#111",
-},
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    gap: 8,
+    marginBottom: 8,
+  },
+  toggleText: {
+    fontSize: 14,
+    fontFamily: "Roboto",
+    color: "#111",
+  },
 
   stepCard: {
     backgroundColor: Colors.white,
@@ -508,5 +581,56 @@ toggleText: {
   primaryBtnText: {
     color: "#fff",
     fontFamily: "RobotoMedium",
+  },
+  profilePhotoContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 20,
+  },
+
+  profileImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60, // ✅ circular
+    borderWidth: 3,
+    borderColor: Colors.primary,
+    backgroundColor: "#f2f2f2",
+  },
+
+  profileEditIcon: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    backgroundColor: Colors.primary,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: Colors.white,
+  },
+  reviewProfileContainer: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
+
+  reviewProfileImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+  },
+
+  reviewProfilePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: Colors.gray,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f2f2f2",
   },
 });
